@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Run Coach</title>
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Run Coach">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #ea580c; --accent-text: #fff; --ok: #16a34a;
+    
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f14; --card: #161b22; --text: #f3f4f6; --muted: #9ca3af; --line: #262d36;
+      --accent: #fb923c; --accent-text: #111; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 calc(24px + env(safe-area-inset-bottom)); }
+  button { font: inherit; cursor: pointer; }
+  main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+  .screen { display: none; } .screen.active { display: block; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 0 6px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 18px; margin: 0 0 6px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 12px 0; }
+  .week-nav { display: flex; align-items: center; gap: 8px; }
+  .week-nav button, .chip { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; min-width: 40px; height: 36px; padding: 0 10px; }
+  .chip.sel { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .bar { height: 8px; background: var(--line); border-radius: 6px; overflow: hidden; margin-top: 8px; }
+  .bar > span { display: block; height: 100%; background: var(--ok); }
+  .run-card { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; color: var(--text);
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 10px 0; }
+  .run-card .icon { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; flex: none; }
+  .run-card .info { flex: 1; min-width: 0; }
+  .run-card .info strong { display: block; }
+  .run-card .check { font-size: 22px; color: var(--ok); }
+  .run-card.done { opacity: .75; }
+  ul.rules { margin: 6px 0 0; padding-left: 20px; } ul.rules li { margin: 4px 0; }
+  .btn { display: block; width: 100%; border: 0; border-radius: 14px; padding: 15px; font-size: 17px; font-weight: 700; background: var(--accent); color: var(--accent-text); margin-top: 12px; }
+  .btn.secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  .warn { background: #fef3c7; color: #78350f; border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 15px; }
+  @media (prefers-color-scheme: dark) { .warn { background: #422006; color: #fde68a; } }
+  .steps { list-style: none; padding: 0; margin: 0; }
+  .steps li { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 7px; flex: none; }
+  .opt-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .stepper button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 20px; }
+  .stepper output { min-width: 64px; text-align: center; font-weight: 700; font-size: 18px; }
+  .history li { display: flex; justify-content: space-between; gap: 8px; }
+  input[type=text] { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 110px; text-align: center; }
+
+  /* Run screen */
+  #runScreen { position: fixed; inset: 0; z-index: 5; color: #fff; background: var(--phase, #111827);
+    padding: calc(16px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+    display: none; flex-direction: column; transition: background .4s; }
+  #runScreen.active { display: flex; }
+  .run-top { display: flex; justify-content: space-between; font-size: 15px; opacity: .9; }
+  .phase-label { font-size: 30px; font-weight: 800; margin-top: 18px; line-height: 1.15; }
+  .phase-sub { font-size: 18px; opacity: .92; margin-top: 4px; }
+  .clock { font-size: min(30vw, 150px); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -2px; text-align: center; margin: auto 0 4px; line-height: 1; }
+  .clock-note { text-align: center; font-size: 17px; opacity: .92; min-height: 24px; }
+  .pace { text-align: center; margin: 14px 0 0; font-size: 22px; font-weight: 700; background: rgba(0,0,0,.18); border-radius: 14px; padding: 10px; }
+  .pbar { height: 8px; background: rgba(255,255,255,.3); border-radius: 6px; overflow: hidden; margin: 18px 0 6px; }
+  .pbar > span { display: block; height: 100%; background: #fff; }
+  .next { font-size: 15px; opacity: .9; text-align: center; min-height: 20px; }
+  .controls { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 10px; margin-top: 16px; }
+  .controls button { border: 0; border-radius: 16px; padding: 16px 6px; font-size: 17px; font-weight: 700; background: rgba(255,255,255,.2); color: #fff; }
+  .controls button.main { background: #fff; color: #111; }
+</style>
+</head>
+<body>
+<main>
+  <!-- Home -->
+  <section class="screen active" id="home">
+    <header>
+      <h1>🏃 Run Coach</h1>
+      <div class="week-nav">
+        <button id="prevWeek" aria-label="Previous week">‹</button>
+        <strong id="weekLabel"></strong>
+        <button id="nextWeek" aria-label="Next week">›</button>
+      </div>
+    </header>
+    <div class="card">
+      <div class="muted" id="weekSummary"></div>
+      <div class="bar"><span id="weekBar"></span></div>
+    </div>
+    <div id="runList"></div>
+    <div class="card">
+      <h2>The rules</h2>
+      <ul class="rules">
+        <li>Keep at least one easy day between hard runs (intervals and tempo).</li>
+        <li>No leg day the day before intervals or tempo.</li>
+        <li>Most of your running should feel easy. That's what lets the hard days work.</li>
+        <li>Suggested week: Tue intervals · Wed easy · Thu rest · Fri tempo · Sun long run · optional easy on Mon or Sat.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Recent runs</h2>
+      <ul class="steps history" id="history"></ul>
+    </div>
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="opt-row"><span>Pace units</span>
+        <span><button class="chip" data-unit="km">per km</button> <button class="chip" data-unit="mi">per mile</button></span></div>
+      <div class="opt-row"><span>Voice coach</span>
+        <span><button class="chip" data-voice="on">On</button> <button class="chip" data-voice="off">Off</button></span></div>
+      <div class="opt-row"><span>5K time before the plan<br><span class="muted">optional, e.g. 31:40</span></span>
+        <input type="text" id="baseline" inputmode="numeric" placeholder="mm:ss"></div>
+      <p class="muted">Keep your ringer on and volume up to hear the coach. The screen stays on during a run; if you lock it, the coach pauses until you come back.</p>
+    </div>
+  </section>
+
+  <!-- Run details -->
+  <section class="screen" id="detail">
+    <header><button class="chip" id="backBtn">‹ Back</button><span></span></header>
+    <h1 id="dTitle"></h1>
+    <p class="muted" id="dDesc"></p>
+    <div id="dWarn"></div>
+    <div class="card" id="dOptions"></div>
+    <div class="card"><h2>The plan</h2><ul class="steps" id="dSteps"></ul></div>
+    <button class="btn" id="startBtn">Start run</button>
+    <button class="btn secondary" id="markBtn">I did this run without the app</button>
+  </section>
+
+  <!-- Done -->
+  <section class="screen" id="done">
+    <header><span></span></header>
+    <div style="text-align:center;font-size:64px;margin-top:20px">🎉</div>
+    <h1 style="text-align:center" id="doneTitle">Nice run!</h1>
+    <div class="card" id="doneBody"></div>
+    <button class="btn" id="homeBtn">Back to my week</button>
+  </section>
+</main>
+
+<!-- Live run -->
+<section id="runScreen" aria-live="polite">
+  <div class="run-top"><span id="rName"></span><span id="rTotal">0:00</span></div>
+  <div class="phase-label" id="rPhase"></div>
+  <div class="phase-sub" id="rStep"></div>
+  <div class="clock" id="rClock">0:00</div>
+  <div class="clock-note" id="rNote"></div>
+  <div class="pace" id="rPace"></div>
+  <div class="pbar"><span id="rBar"></span></div>
+  <div class="next" id="rNext"></div>
+  <div class="controls">
+    <button id="endBtn">End</button>
+    <button class="main" id="pauseBtn">Pause</button>
+    <button id="skipBtn">Next ›</button>
+  </div>
+</section>
+
+<script>
+// ---------- Settings & storage ----------
+const KEY = 'run-coach-v1';
+const state = (() => {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch (e) {}
+  return { week: 1, unit: 'km', voice: true, baseline: '', done: {}, history: [] };
+})();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+
+// ---------- Paces ----------
+const PACE = {
+  rep:   { km: '5:15–5:25 /km', mi: '8:30–8:45 /mi' },
+  tempo: { km: '6:05–6:15 /km', mi: '9:45–10:00 /mi' },
+  easy:  { km: '6:45–7:15 /km', mi: '11:00–11:40 /mi' },
+};
+const pace = k => k && PACE[k] ? PACE[k][state.unit] : '';
+const kmLabel = km => state.unit === 'km' ? `${km} km` : `${km} km (${(km * 0.621).toFixed(1)} mi)`;
+
+// ---------- The plan ----------
+// A phase: label, kind (colour), secs (planned length), pace key, say (spoken at start),
+// open (keeps counting after the planned time until you tap Next), stopwatch (counts up).
+const COLORS = { warm: '#2563eb', hard: '#dc2626', tempo: '#ea580c', rest: '#16a34a', easy: '#0d9488', race: '#7c3aed' };
+const warm = { label: 'Warm up', kind: 'warm', secs: 600, pace: 'easy', say: 'Warm up. 10 minutes easy.' };
+const cool = { label: 'Cool down', kind: 'warm', secs: 600, pace: 'easy', say: 'Cool down. 10 minutes easy. Great work.' };
+
+const RUNS = [
+  { id: 'intervals', name: 'Run 1 · Intervals', emoji: '⚡', kind: 'hard', hard: true,
+    desc: 'Warm up, then fast 400 m repeats with 90 seconds of walking or slow jogging between, then cool down.',
+    opt: { key: 'reps', label: '400 m repeats', min: 6, max: 8, def: 6, fmt: v => `${v} ×` },
+    build: o => {
+      const p = [warm];
+      for (let i = 1; i <= o.reps; i++) {
+        p.push({ label: `Repeat ${i} of ${o.reps}`, sub: '400 m fast', kind: 'hard', secs: 130, pace: 'rep', open: true,
+          note: 'About 2:06–2:10. Tap Finish when you hit 400 m.',
+          say: `Repeat ${i} of ${o.reps}. 400 metres. Go!` });
+        if (i < o.reps) p.push({ label: 'Recover', sub: 'Walk or jog slowly', kind: 'rest', secs: 90, say: 'Recover. 90 seconds, walk or jog slowly.' });
+      }
+      p.push(cool);
+      return p;
+    } },
+  { id: 'easy', name: 'Run 2 · Easy', emoji: '🙂', kind: 'easy',
+    desc: 'A relaxed run. You should be able to talk the whole time.',
+    opt: { key: 'mins', label: 'Length', min: 30, max: 40, step: 5, def: 30, fmt: v => `${v} min` },
+    build: o => [{ label: 'Easy run', sub: 'You should be able to talk', kind: 'easy', secs: o.mins * 60, pace: 'easy', checkIn: true,
+      say: `Easy run, ${o.mins} minutes. Relaxed pace, you should be able to talk.` }] },
+  { id: 'tempo', name: 'Run 3 · Tempo', emoji: '🔥', kind: 'tempo', hard: true,
+    desc: 'Warm up, then 20 minutes comfortably hard, then cool down.',
+    build: () => [warm,
+      { label: 'Tempo', sub: 'Comfortably hard', kind: 'tempo', secs: 1200, pace: 'tempo', checkIn: true,
+        say: 'Tempo. 20 minutes, comfortably hard.' },
+      cool] },
+  { id: 'long', name: 'Run 4 · Long run', emoji: '🛣️', kind: 'easy',
+    desc: 'All at easy pace. This builds your endurance.',
+    opt: { key: 'km', label: 'Distance', min: 7, max: 10, def: 7, fmt: v => kmLabel(v) },
+    build: o => [{ label: `Long run · ${kmLabel(o.km)}`, sub: 'All easy', kind: 'easy', secs: o.km * 7 * 60, pace: 'easy', open: true, checkIn: true,
+      note: `About ${o.km * 7} minutes at easy pace. Tap Finish when you've done ${o.km} km.`,
+      say: `Long run, ${o.km} kilometres, all at easy pace.` }] },
+  { id: 'optional', name: 'Run 5 · Optional easy', emoji: '🌿', kind: 'easy', optional: true,
+    desc: "Another easy run, or skip it if your legs are tired.",
+    opt: { key: 'mins', label: 'Length', min: 20, max: 30, step: 5, def: 20, fmt: v => `${v} min` },
+    build: o => [{ label: 'Easy run', sub: 'Nice and relaxed', kind: 'easy', secs: o.mins * 60, pace: 'easy', checkIn: true,
+      say: `Easy run, ${o.mins} minutes. Nice and relaxed.` }] },
+];
+const TEST = { id: 'test5k', name: '5K time trial', emoji: '🏁', kind: 'race', hard: true,
+  desc: 'After four weeks: warm up, run 5K as fast as you can hold, then cool down. Tap Finish when you cross 5 km.',
+  build: () => [warm,
+    { label: '5K', sub: 'Steady and strong', kind: 'race', stopwatch: true, note: 'Tap Finish at 5 km.',
+      say: '5K time trial. Start steady, finish strong. Go!' },
+    cool] };
+const allRuns = () => state.week >= 4 ? [...RUNS, TEST] : RUNS;
+const findRun = id => [...RUNS, TEST].find(r => r.id === id);
+
+// ---------- Helpers ----------
+const fmt = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+const parseTime = t => { const m = /^(\d{1,3}):([0-5]\d)$/.exec((t || '').trim()); return m ? +m[1] * 60 + +m[2] : null; };
+const localIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const todayIso = () => localIso(new Date());
+const doneKey = (week, id) => `${week}:${id}`;
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  window.scrollTo(0, 0);
+}
+
+// ---------- Home ----------
+function renderHome() {
+  $('weekLabel').textContent = `Week ${state.week} of 4`;
+  $('prevWeek').disabled = state.week <= 1;
+  $('nextWeek').disabled = state.week >= 4;
+  const main = RUNS.filter(r => !r.optional);
+  const doneCount = main.filter(r => state.done[doneKey(state.week, r.id)]).length;
+  $('weekSummary').textContent = `${doneCount} of ${main.length} key runs done this week` +
+    (state.done[doneKey(state.week, 'optional')] ? ' + the optional run' : '');
+  $('weekBar').style.width = (doneCount / main.length * 100) + '%';
+  $('runList').innerHTML = '';
+  for (const r of allRuns()) {
+    const isDone = !!state.done[doneKey(state.week, r.id)];
+    const b = document.createElement('button');
+    b.className = 'run-card' + (isDone ? ' done' : '');
+    b.innerHTML = `<div class="icon" style="background:${COLORS[r.kind]}22">${r.emoji}</div>
+      <div class="info"><strong></strong><span class="muted"></span></div><div class="check">${isDone ? '✓' : ''}</div>`;
+    b.querySelector('strong').textContent = r.name;
+    b.querySelector('.muted').textContent = r.desc;
+    b.onclick = () => openDetail(r.id);
+    $('runList').appendChild(b);
+  }
+  const h = $('history');
+  h.innerHTML = '';
+  if (!state.history.length) h.innerHTML = '<li class="muted">No runs yet. Pick one above to start.</li>';
+  state.history.slice(-8).reverse().forEach(x => {
+    const li = document.createElement('li');
+    const d = new Date(x.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    li.innerHTML = '<span></span><span class="muted"></span>';
+    li.firstChild.textContent = `${findRun(x.id)?.emoji || '🏃'} ${findRun(x.id)?.name.replace(/^Run \d · /, '') || x.id}`;
+    li.lastChild.textContent = `${d}${x.time ? ' · ' + fmt(x.time) : ''}${x.result ? ' · 5K ' + fmt(x.result) : ''}`;
+    h.appendChild(li);
+  });
+  document.querySelectorAll('[data-unit]').forEach(b => b.classList.toggle('sel', b.dataset.unit === state.unit));
+  document.querySelectorAll('[data-voice]').forEach(b => b.classList.toggle('sel', (b.dataset.voice === 'on') === state.voice));
+  $('baseline').value = state.baseline || '';
+}
+$('prevWeek').onclick = () => { state.week--; save(); renderHome(); };
+$('nextWeek').onclick = () => { state.week++; save(); renderHome(); };
+document.querySelectorAll('[data-unit]').forEach(b => b.onclick = () => { state.unit = b.dataset.unit; save(); renderHome(); });
+document.querySelectorAll('[data-voice]').forEach(b => b.onclick = () => { state.voice = b.dataset.voice === 'on'; save(); renderHome(); });
+$('baseline').onchange = () => { state.baseline = parseTime($('baseline').value) ? $('baseline').value.trim() : ''; save(); renderHome(); };
+
+// ---------- Run details ----------
+let current = null, optVal = null;
+function openDetail(id) {
+  current = findRun(id);
+  optVal = current.opt ? (state['opt_' + id] ?? current.opt.def) : null;
+  $('dTitle').textContent = `${current.emoji} ${current.name}`;
+  $('dDesc').textContent = current.desc;
+
+  // Warnings from the rules
+  const warns = [];
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yesterday = localIso(y);
+  const today = todayIso();
+  const hardRecent = state.history.find(h => findRun(h.id)?.hard && (h.date === yesterday || h.date === today));
+  if (current.hard) {
+    warns.push('Leg day yesterday? Then swap this for an easy run today.');
+    if (hardRecent) warns.push(`You did a hard run ${hardRecent.date === today ? 'today' : 'yesterday'}. Keep at least one easy day between hard runs.`);
+  }
+  if (current.optional) warns.push('Legs tired? Skipping this one is the right call.');
+  $('dWarn').innerHTML = '';
+  warns.forEach(w => { const d = document.createElement('div'); d.className = 'warn'; d.textContent = '⚠️ ' + w; $('dWarn').appendChild(d); });
+
+  renderOptions();
+  $('markBtn').hidden = current.id === 'test5k';
+  show('detail');
+}
+function renderOptions() {
+  const box = $('dOptions');
+  box.hidden = !current.opt;
+  if (current.opt) {
+    const o = current.opt;
+    box.innerHTML = `<div class="opt-row"><strong></strong><div class="stepper">
+      <button id="optDown" aria-label="Less">−</button><output id="optVal"></output><button id="optUp" aria-label="More">+</button></div></div>`;
+    box.querySelector('strong').textContent = o.label;
+    $('optVal').textContent = o.fmt(optVal);
+    const step = o.step || 1;
+    $('optDown').onclick = () => { optVal = Math.max(o.min, optVal - step); state['opt_' + current.id] = optVal; save(); renderOptions(); };
+    $('optUp').onclick = () => { optVal = Math.min(o.max, optVal + step); state['opt_' + current.id] = optVal; save(); renderOptions(); };
+  }
+  const phases = current.build(current.opt ? { [current.opt.key]: optVal } : {});
+  const ul = $('dSteps');
+  ul.innerHTML = '';
+  // Collapse repeat/recover pairs into one line for readability.
+  const reps = phases.filter(p => p.pace === 'rep').length;
+  let shownReps = false;
+  for (const p of phases) {
+    if (p.pace === 'rep' || (reps && p.kind === 'rest')) {
+      if (shownReps) continue;
+      shownReps = true;
+      addStep(ul, 'hard', `${reps} × 400 m at ${pace('rep')}`, '90 s walk or slow jog between each');
+      continue;
+    }
+    addStep(ul, p.kind, `${p.label}${p.secs && !p.open ? ' · ' + Math.round(p.secs / 60) + ' min' : ''}`, [p.pace ? pace(p.pace) : '', p.note || ''].filter(Boolean).join(' · '));
+  }
+  const total = phases.reduce((t, p) => t + (p.secs || 0), 0);
+  addStep(ul, 'none', `About ${Math.round(total / 60) + (current.id === 'test5k' ? 30 : 0)} minutes in total`, '');
+}
+function addStep(ul, kind, title, sub) {
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="dot" style="background:${COLORS[kind] || 'transparent'}"></span><div><div></div><div class="muted"></div></div>`;
+  li.querySelector('div > div').textContent = title;
+  li.querySelector('.muted').textContent = sub;
+  ul.appendChild(li);
+}
+$('backBtn').onclick = () => { renderHome(); show('home'); };
+$('markBtn').onclick = () => { finishRun({ manual: true }); };
+$('startBtn').onclick = () => startRun();
+
+// ---------- Sound & voice ----------
+let audio = null;
+function unlockAudio() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume();
+  } catch (e) {}
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {}
+}
+function beep(freq = 880, ms = 160, when = 0) {
+  if (!audio) return;
+  try {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = freq; o.type = 'sine';
+    const t = audio.currentTime + when;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+    o.connect(g).connect(audio.destination);
+    o.start(t); o.stop(t + ms / 1000 + 0.05);
+  } catch (e) {}
+}
+function say(text) {
+  if (!state.voice || !('speechSynthesis' in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0;
+    const v = speechSynthesis.getVoices().find(v => /^en/i.test(v.lang) && /samantha|daniel|karen|google/i.test(v.name));
+    if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+const spokenPace = k => {
+  const p = pace(k);
+  return p ? ' Target ' + p.replace('–', ' to ').replace('/km', 'per kilometre').replace('/mi', 'per mile') + '.' : '';
+};
+
+// ---------- Live run engine ----------
+// Times come from the clock, not from counting ticks, so they stay right if the phone stalls.
+let run = null, tickTimer = null, wakeLock = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (run && document.visibilityState === 'visible') keepAwake(); });
+
+function startRun() {
+  unlockAudio();
+  const phases = current.build(current.opt ? { [current.opt.key]: optVal } : {});
+  run = { r: current, phases, i: -1, started: Date.now(), pausedAt: null, pausedMs: 0, phaseStart: 0, cues: new Set() };
+  $('rName').textContent = current.name;
+  $('runScreen').classList.add('active');
+  keepAwake();
+  nextPhase();
+  tickTimer = setInterval(tick, 250);
+}
+const now = () => (run.pausedAt || Date.now()) - run.pausedMs;
+function nextPhase() {
+  run.i++;
+  if (run.i >= run.phases.length) return finishRun({});
+  const p = run.phases[run.i];
+  run.phaseStart = now();
+  run.cues = new Set();
+  $('runScreen').style.setProperty('--phase', COLORS[p.kind]);
+  $('rPhase').textContent = p.label;
+  $('rStep').textContent = `${p.sub ? p.sub + ' · ' : ''}Step ${run.i + 1} of ${run.phases.length}`;
+  $('rPace').textContent = p.pace ? pace(p.pace) : (p.kind === 'rest' ? 'Easy breathing' : 'Run by feel');
+  $('rPace').hidden = false;
+  const n = run.phases[run.i + 1];
+  $('rNext').textContent = n ? `Next: ${n.label}${n.secs && !n.open ? ' · ' + fmt(n.secs) : ''}` : 'Last step!';
+  $('skipBtn').textContent = (p.open || p.stopwatch) ? 'Finish ›' : 'Next ›';
+  if (p.kind === 'hard' || p.kind === 'race' || p.kind === 'tempo') { beep(1046, 180); beep(1046, 180, .25); beep(1318, 300, .5); }
+  else beep(660, 250);
+  say(p.say + spokenPace(p.pace));
+  tick();
+}
+function tick() {
+  if (!run) return;
+  const p = run.phases[run.i];
+  const el = (now() - run.phaseStart) / 1000;
+  $('rTotal').textContent = fmt((now() - run.started) / 1000);
+  if (p.stopwatch) {
+    $('rClock').textContent = fmt(el);
+    $('rNote').textContent = p.note || '';
+    $('rBar').style.width = '0%';
+    return;
+  }
+  const left = p.secs - el;
+  const cue = (key, fn) => { if (!run.cues.has(key)) { run.cues.add(key); fn(); } };
+  if (left > 0) {
+    $('rClock').textContent = fmt(Math.ceil(left));
+    $('rNote').textContent = p.note || '';
+    $('rBar').style.width = Math.min(100, el / p.secs * 100) + '%';
+    if (p.secs >= 300 && left <= 60 && left > 58) cue('1min', () => say('One minute left.'));
+    if (p.secs >= 600 && Math.abs(el - p.secs / 2) < 1) cue('half', () => say('Halfway.' + (p.checkIn ? ' ' + checkInLine(p) : '')));
+    if (p.checkIn && el >= 300) {
+      const mark = Math.floor(el / 300) * 300;
+      if (el - mark < 1.5 && Math.abs(el - p.secs / 2) > 30) cue('ci' + mark, () => say(`${mark / 60} minutes done. ${checkInLine(p)}`));
+    }
+    for (const s of [3, 2, 1]) if (left <= s && left > s - 1) cue('c' + s, () => beep(s === 1 ? 990 : 660, 120));
+  } else if (p.open) {
+    // Planned time is up, but this one ends on distance: keep counting until Finish.
+    $('rClock').textContent = '+' + fmt(-left);
+    $('rNote').textContent = p.pace === 'rep' ? 'Tap Finish at 400 m' : 'Keep going, tap Finish at your distance';
+    $('rBar').style.width = '100%';
+    cue('over', () => { beep(880, 200); say(p.pace === 'rep' ? 'Time. Finish your 400 and tap Finish.' : 'You should be close. Tap Finish when you reach your distance.'); });
+  } else {
+    nextPhase();
+  }
+}
+function checkInLine(p) {
+  return p.kind === 'tempo' ? 'Comfortably hard, stay steady.' : 'Keep it easy. You should be able to talk.';
+}
+$('pauseBtn').onclick = () => {
+  if (!run) return;
+  if (run.pausedAt) {
+    run.pausedMs += Date.now() - run.pausedAt; run.pausedAt = null;
+    $('pauseBtn').textContent = 'Pause'; say('Back to it.');
+  } else {
+    run.pausedAt = Date.now();
+    $('pauseBtn').textContent = 'Resume'; say('Paused.');
+  }
+};
+$('skipBtn').onclick = () => {
+  if (!run) return;
+  const p = run.phases[run.i];
+  if (p.stopwatch) run.result = (now() - run.phaseStart) / 1000;
+  if (run.pausedAt) $('pauseBtn').click();
+  nextPhase();
+};
+$('endBtn').onclick = () => {
+  if (!run) return;
+  if (!confirm('End this run now?')) return;
+  const ranLong = (now() - run.started) > 10 * 60 * 1000;
+  if (ranLong && confirm('Count it as done for this week?')) finishRun({});
+  else stopRun(), show('detail');
+};
+function stopRun() {
+  clearInterval(tickTimer); tickTimer = null;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  try { wakeLock && wakeLock.release(); } catch (e) {}
+  wakeLock = null;
+  $('runScreen').classList.remove('active');
+}
+
+// ---------- Finish ----------
+function finishRun({ manual }) {
+  const r = current;
+  const entry = { id: r.id, date: todayIso(), week: state.week };
+  if (run && !manual) {
+    entry.time = (now() - run.started) / 1000;
+    if (run.result) entry.result = run.result;
+    stopRun();
+    say(r.id === 'test5k' && entry.result ? `Done! Your 5K time is ${fmt(entry.result).replace(':', ' minutes ')} seconds.` : 'Run complete. Great job!');
+    beep(784, 150); beep(988, 150, .18); beep(1318, 400, .36);
+  }
+  run = null;
+  state.done[doneKey(state.week, r.id)] = true;
+  state.history.push(entry);
+  if (state.history.length > 200) state.history = state.history.slice(-200);
+  save();
+
+  $('doneTitle').textContent = manual ? 'Logged ✓' : 'Nice run!';
+  const body = $('doneBody');
+  body.innerHTML = '';
+  const line = (t, cls) => { const p = document.createElement('p'); p.textContent = t; if (cls) p.className = cls; p.style.margin = '6px 0'; body.appendChild(p); };
+  line(`${r.emoji} ${r.name}`);
+  if (entry.time) line(`Total time: ${fmt(entry.time)}`);
+  if (entry.result) {
+    line(`5K time: ${fmt(entry.result)}`);
+    const base = parseTime(state.baseline);
+    if (base) {
+      const diff = base - entry.result;
+      line(diff > 0 ? `That's ${fmt(diff)} faster than before the plan! 🚀` : `Before the plan: ${state.baseline}. Keep at it, the work adds up.`);
+    }
+  }
+  const main = RUNS.filter(x => !x.optional);
+  const left = main.filter(x => !state.done[doneKey(state.week, x.id)]);
+  if (r.id !== 'test5k') {
+    line(left.length ? `Still to do this week: ${left.map(x => x.name.replace(/^Run \d · /, '')).join(', ')}.` : 'Every key run done this week. 💪', 'muted');
+    if (r.hard) line('Tomorrow: an easy day or rest.', 'muted');
+  }
+  show('done');
+}
+$('homeBtn').onclick = () => { renderHome(); show('home'); };
+
+renderHome();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
