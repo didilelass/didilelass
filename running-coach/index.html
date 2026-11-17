@@ -149,6 +149,7 @@
       <div class="opt-row"><span>5K time before the plan<br><span class="muted">optional, e.g. 31:40</span></span>
         <input type="text" id="baseline" inputmode="numeric" placeholder="e.g. 3140"></div>
       <p class="muted">Keep your ringer on and volume up to hear the coach. The screen stays on during a run; if you lock it, the coach pauses until you come back.</p>
+      <p class="muted" style="font-size:13px">App version <strong id="appVersion"></strong> · times can be typed as digits, e.g. 2035 = 20:35</p>
     </div>
   </section>
 
@@ -910,7 +911,22 @@ function finishRun({ manual }) {
 $('homeBtn').onclick = () => { renderHome(); show('home'); };
 
 renderHome();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// ---------- Updates ----------
+// The home-screen app can keep an old copy open for days. Check for a new version
+// whenever the app comes back to the screen, and reload once it's ready (never mid-run).
+const APP_VERSION = '2026-11-17.3';
+$('appVersion').textContent = APP_VERSION;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded) return;
+    const reload = () => { if (!run && !reloaded) { reloaded = true; location.reload(); } };
+    if (run) { const t = setInterval(() => { if (!run) { clearInterval(t); reload(); } }, 2000); } else reload();
+  });
+}
 </script>
 </body>
 </html>

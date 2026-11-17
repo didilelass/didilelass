@@ -1,5 +1,5 @@
 // Caches the app so it opens without an internet connection.
-const CACHE = 'run-coach-v2';
+const CACHE = 'run-coach-v3';
 const FILES = ['./', 'index.html', 'manifest.json', 'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -12,11 +12,12 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
-// Network first, so updates show up when online; fall back to the cache offline.
+// Network first, and always ask the server for the newest version (no stale browser copy),
+// so updates show up as soon as you're online; fall back to the saved copy offline.
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
