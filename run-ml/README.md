@@ -6,6 +6,9 @@ It learns from **your own run log** how your training affects your 5K time, then
 2. **tells you what matters most** for you (weekly distance, rest, long runs, hard sessions...)
 3. **tests ~70 different 4-week plans** and shows the ones it expects to make you fastest, never growing mileage more than 10% a week
 
+**👉 Try it in your browser, no install: https://didilelass.github.io/didilelass/run-ml/**
+Upload a Strava export (or try the sample data). It runs this same Python code in your browser with [Pyodide](https://pyodide.org/), so your file never leaves your computer.
+
 It goes with the [Run Coach](../running-coach) app: use Run Coach to do the sessions, and this to decide what to train next.
 
 ## 🎓 Learn the math behind it

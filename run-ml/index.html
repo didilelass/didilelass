@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run ML</title>
+<meta name="description" content="Upload your runs: three machine learning models compete to predict your 5K, and the winner plans your next 4 weeks. Runs in your browser.">
+<link rel="icon" href="../running-coach/icons/icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #ea580c; --accent-text: #fff; --win: #2a78d6; --bar: #c9c8c2; --track: #eeede9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f14; --card: #161b22; --text: #f3f4f6; --muted: #9ca3af; --line: #262d36;
+      --accent: #fb923c; --accent-text: #111; --win: #3987e5; --bar: #4b5058; --track: #20262e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f14; --card: #161b22; --text: #f3f4f6; --muted: #9ca3af; --line: #262d36;
+    --accent: #fb923c; --accent-text: #111; --win: #3987e5; --bar: #4b5058; --track: #20262e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.5px; }
+  h2 { font-size: 19px; margin: 0 0 4px; }
+  p { margin: 6px 0; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .lead { font-size: 18px; color: var(--muted); margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin: 14px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .btn { border: 0; border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 700; cursor: pointer;
+    background: var(--accent); color: var(--accent-text); }
+  .btn.secondary { background: var(--card); color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  input[type=file] { display: none; }
+  .privacy { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--muted); margin-top: 12px; }
+  #status { min-height: 24px; margin: 4px 0 0; font-weight: 600; }
+  #status.err { color: #dc2626; font-weight: 500; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #results { display: none; }
+  .hero { text-align: center; }
+  .hero .big { font-size: 64px; font-weight: 800; letter-spacing: -2px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .bars { margin-top: 12px; }
+  .bar-row { display: grid; grid-template-columns: minmax(110px, 190px) 1fr; gap: 10px; align-items: center; margin: 8px 0; }
+  .bar-row .label { font-size: 14px; line-height: 1.25; }
+  .bar-row .label small { display: block; color: var(--muted); font-size: 12px; }
+  .track { position: relative; height: 26px; }
+  .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--bar); min-width: 2px; }
+  .fill.win { background: var(--win); }
+  .fill.base { background: repeating-linear-gradient(135deg, var(--bar) 0 4px, transparent 4px 7px); }
+  .val { position: absolute; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums; padding-left: 6px; white-space: nowrap; }
+  .models { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+  .model { border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 14px; }
+  .model.win { border-color: var(--win); box-shadow: 0 0 0 1px var(--win) inset; }
+  .model strong { display: block; font-size: 15px; margin-bottom: 2px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-text); background: var(--win);
+    padding: 1px 7px; border-radius: 99px; margin-left: 4px; vertical-align: 1px; }
+  .plan { border-top: 1px solid var(--line); padding: 12px 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
+  .plan:first-of-type { border-top: 0; }
+  .plan .n { width: 30px; height: 30px; border-radius: 50%; background: var(--track); display: grid; place-items: center; font-weight: 700; }
+  .plan .t { font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chip { font-size: 13px; background: var(--track); border-radius: 99px; padding: 2px 10px; }
+  details { margin-top: 6px; }
+  summary { cursor: pointer; font-weight: 600; }
+  code { font-size: 13px; background: var(--track); padding: 1px 5px; border-radius: 5px; }
+  table.fmt { border-collapse: collapse; font-size: 13px; margin: 8px 0; width: 100%; }
+  table.fmt td, table.fmt th { border: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+  @media (max-width: 480px) { .hero .big { font-size: 52px; } .bar-row { grid-template-columns: 110px 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧠 Run ML</h1>
+  <p class="lead">Upload your runs. Three machine learning models compete to predict your 5K, and the winner plans your next 4 weeks.</p>
+
+  <div class="card">
+    <h2>1. Your runs</h2>
+    <p class="muted">A Strava export (<code>activities.csv</code>) works as is. Or a CSV with <code>date, distance_km, duration_min, type</code>.</p>
+    <div class="row">
+      <label class="btn" id="uploadBtn" for="file" role="button" tabindex="0">Upload my runs (.csv)</label>
+      <input type="file" id="file" accept=".csv,text/csv">
+      <button class="btn secondary" id="sampleBtn">Try with sample data</button>
+    </div>
+    <div class="privacy"><span>🔒</span><span>Everything runs in your browser. Your file is never uploaded anywhere.</span></div>
+    <p id="status" aria-live="polite"></p>
+    <details>
+      <summary>How do I get my runs?</summary>
+      <p><strong>Strava:</strong> on the website, Settings → My Account → Download or Delete Your Account → <em>Request your archive</em>. You'll get an email with a zip. Upload <code>activities.csv</code> from it.</p>
+      <p><strong>Your own CSV:</strong></p>
+      <table class="fmt"><tr><th>date</th><th>distance_km</th><th>duration_min</th><th>type</th></tr>
+        <tr><td>2026-03-05</td><td>5.0</td><td>30.8</td><td>race</td></tr>
+        <tr><td>2026-03-08</td><td>8.4</td><td>58.2</td><td>long</td></tr></table>
+      <p class="muted"><code>type</code> is optional: easy, long, tempo, intervals or race. If you leave it out, it's guessed from your pace. You need at least 12 races or tempo runs and about 2 months of history.</p>
+    </details>
+  </div>
+
+  <section id="results">
+    <div class="card hero">
+      <p class="muted" id="heroNote"></p>
+      <div class="big" id="heroTime"></div>
+      <p id="heroSub"></p>
+    </div>
+
+    <div class="card">
+      <h2>2. The models competed</h2>
+      <p class="muted">Each model was trained on your older runs and tested on newer ones it had never seen: always train on the past, test on the future. Bars show the average error in seconds. <strong>Shorter is better.</strong></p>
+      <div class="bars" id="scoreBars" role="list"></div>
+      <div class="models" id="modelCards"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. What matters most for your 5K</h2>
+      <p class="muted">How much worse the winning model gets (in seconds) when it can't use each piece of information. Bigger means more important for <em>you</em>.</p>
+      <div class="bars" id="impBars" role="list"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. Your best 4-week plans</h2>
+      <p class="muted">The winning model tried about 70 plans and predicted your 5K at the end of each. Mileage never grows more than 10% a week.</p>
+      <div id="plans"></div>
+      <p class="muted">The model only knows what your own training has shown it. Treat this as a guide, not a promise, and back off if anything hurts.</p>
+    </div>
+  </section>
+
+  <div class="card">
+    <h2>How it works</h2>
+    <details>
+      <summary>The short version</summary>
+      <p><strong>1. Every hard effort becomes a training example.</strong> Each race or tempo run is turned into the 5K time it's "worth" (Riegel's formula: <code>T₅ₖ = T × (5 / km)^1.06</code>).</p>
+      <p><strong>2. Features describe the training before it:</strong> fitness (6-week load), fatigue (1-week load), freshness, km per week, runs per week, hard sessions, long run, rest days and recent best.</p>
+      <p><strong>3. Three models compete</strong> with time-series cross-validation, against a simple baseline ("you'll run your recent best"). The one with the smallest error on future runs wins.</p>
+      <p><strong>4. The winner plans:</strong> each candidate plan becomes a pretend run log for the next 4 weeks, and the model predicts your 5K at the end.</p>
+      <p>It's the same Python code as the command-line tool (pandas and scikit-learn), running in your browser with <a href="https://pyodide.org/">Pyodide</a>.</p>
+    </details>
+    <p class="muted" style="margin-top:10px">Little data, like just a few races? The <a href="../running-coach/">Run Coach</a> phone app uses a Bayesian model made for that. · <a href="https://github.com/didilelass/didilelass/tree/main/run-ml">Code on GitHub</a></p>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = m => { const s = Math.round(m * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const MODELS = {
+  gradient_boosting: { name: 'Gradient boosting', how: 'Small decision trees in a row, each fixing the mistakes of the ones before.' },
+  random_forest: { name: 'Random forest', how: 'Hundreds of decision trees, each trained on a random slice of your runs, averaged together.' },
+  ridge: { name: 'Ridge regression', how: 'A straight-line model with a "rubber band" that keeps it from overreacting to small data.' },
+  baseline_recent_best: { name: 'Baseline', how: '"You\'ll run your recent best." Any model worth using has to beat this.' },
+};
+
+function status(text, busy, err) {
+  $('status').innerHTML = (busy ? '<span class="spinner"></span>' : '') ;
+  $('status').append(text);
+  $('status').classList.toggle('err', !!err);
+  $('sampleBtn').disabled = busy;
+  $('uploadBtn').style.pointerEvents = busy ? 'none' : '';
+  $('uploadBtn').style.opacity = busy ? .5 : '';
+}
+
+let pyReady = null;
+function loadPython() {
+  if (pyReady) return pyReady;
+  pyReady = (async () => {
+    status('Loading Python in your browser (first time only, about 20 seconds)…', true);
+    const py = await loadPyodide();
+    await py.loadPackage(['numpy', 'pandas', 'scikit-learn', 'scipy']);
+    py.FS.mkdirTree('/home/pyodide/runml');
+    for (const f of ['__init__.py', 'data.py', 'features.py', 'model.py', 'plan.py', 'cli.py']) {
+      const res = await fetch('runml/' + f, { cache: 'no-cache' });
+      if (!res.ok) throw new Error('Could not load ' + f);
+      py.FS.writeFile('/home/pyodide/runml/' + f, await res.text());
+    }
+    py.runPython(`
+import io, json, sys
+sys.path.insert(0, "/home/pyodide")
+from runml.data import load_runs
+from runml.features import build_dataset
+from runml.model import train
+from runml.plan import best_plans, current_prediction
+from runml.cli import EXPLAIN
+
+def analyse(csv_text):
+    try:
+        runs = load_runs(io.StringIO(csv_text))
+    except Exception as e:
+        return json.dumps({"error": f"Couldn't read that file: {e}"})
+    if len(runs) < 10:
+        return json.dumps({"error": f"Only {len(runs)} runs found in that file. Is it the right one?"})
+    data = build_dataset(runs)
+    try:
+        bundle = train(data)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+    plans = best_plans(runs, bundle, top=5)
+    return json.dumps({
+        "n_runs": len(runs), "n_efforts": bundle["n_efforts"],
+        "first": str(runs["date"].min().date()), "last": str(runs["date"].max().date()),
+        "winner": bundle["name"], "scores": bundle["scores"],
+        "importance": [[EXPLAIN[k], float(v)] for k, v in bundle["importance"].items()],
+        "prediction": current_prediction(runs, bundle),
+        "plans": [{**{k: (str(v) if k == "race_day" else (bool(v) if k == "taper_last_week" else v))
+                      for k, v in row.items()}} for row in plans.to_dict("records")],
+    }, default=float)
+`);
+    return py;
+  })();
+  pyReady.catch(() => { pyReady = null; });
+  return pyReady;
+}
+
+async function analyse(csvText, label) {
+  try {
+    const py = await loadPython();
+    status(`Training 3 models on ${label}… (10–30 seconds)`, true);
+    await new Promise(r => setTimeout(r, 30)); // let the message paint before Python takes over
+    const out = JSON.parse(py.globals.get('analyse')(csvText));
+    if (out.error) return status(out.error, false, true);
+    render(out);
+    status(`✓ Done: ${out.n_runs} runs from ${out.first} to ${out.last}, ${out.n_efforts} races and tempo runs to learn from.`, false);
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    console.error(e);
+    status('Something went wrong: ' + (e.message || e).toString().split('\n').slice(-2).join(' '), false, true);
+  }
+}
+
+function bars(el, rows, max, cls, unit = ' s') {
+  el.innerHTML = '';
+  for (const r of rows) {
+    const row = document.createElement('div');
+    row.className = 'bar-row'; row.setAttribute('role', 'listitem');
+    const pct = Math.max(0, r.value) / max * 78; // leave room after the longest bar for its number
+    row.innerHTML = `<div class="label"></div><div class="track"><div class="fill ${r.cls || cls || ''}" style="width:${pct.toFixed(1)}%"></div><span class="val" style="left:${pct.toFixed(1)}%"></span></div>`;
+    row.querySelector('.label').textContent = r.label;
+    if (r.sub) { const s = document.createElement('small'); s.textContent = r.sub; row.querySelector('.label').appendChild(s); }
+    row.querySelector('.val').textContent = Math.round(r.value) + unit;
+    row.title = `${r.label}: ${Math.round(r.value)}${unit}`;
+    el.appendChild(row);
+  }
+}
+
+function render(out) {
+  $('results').style.display = 'block';
+  const err = out.scores[out.winner];
+  $('heroNote').textContent = 'Your predicted 5K if you raced tomorrow';
+  $('heroTime').textContent = fmt(out.prediction);
+  $('heroSub').innerHTML = '';
+  $('heroSub').append(`${fmt(out.prediction / 5)} /km · usually within ±${Math.round(err)} s · predicted by `);
+  const b = document.createElement('strong'); b.textContent = MODELS[out.winner].name; $('heroSub').append(b);
+
+  const order = Object.entries(out.scores).sort((a, b) => a[1] - b[1]);
+  const max = Math.max(...order.map(o => o[1]));
+  bars($('scoreBars'), order.map(([k, v]) => ({
+    label: MODELS[k].name + (k === out.winner ? ' 🏆' : ''), sub: k === 'baseline_recent_best' ? 'no machine learning' : '',
+    value: v, cls: k === out.winner ? 'win' : (k === 'baseline_recent_best' ? 'base' : ''),
+  })), max);
+  const base = out.scores.baseline_recent_best;
+  $('modelCards').innerHTML = '';
+  for (const [k] of order) {
+    const d = document.createElement('div');
+    d.className = 'model' + (k === out.winner ? ' win' : '');
+    d.innerHTML = '<strong></strong><span></span>';
+    d.firstChild.textContent = MODELS[k].name;
+    if (k === out.winner) { const s = document.createElement('span'); s.className = 'badge'; s.textContent = 'WINNER'; d.firstChild.appendChild(s); }
+    d.lastChild.textContent = MODELS[k].how;
+    $('modelCards').appendChild(d);
+  }
+  if (err >= base) {
+    const p = document.createElement('p'); p.className = 'muted';
+    p.textContent = 'No model beat the baseline yet: you probably need more varied runs. Keep logging!';
+    $('modelCards').appendChild(p);
+  }
+
+  const imp = out.importance.filter(([, v]) => v > 0.5).slice(0, 6);
+  bars($('impBars'), imp.map(([label, v]) => ({ label: label[0].toUpperCase() + label.slice(1), value: v })),
+    Math.max(...imp.map(i => i[1])), 'win');
+
+  const now = out.prediction;
+  $('plans').innerHTML = '';
+  out.plans.forEach((p, i) => {
+    const d = document.createElement('div');
+    d.className = 'plan';
+    const gain = Math.round((now - p.predicted_5k) * 60);
+    d.innerHTML = `<div class="n">${i + 1}</div><div><div class="t"></div><div class="chips"></div></div>`;
+    d.querySelector('.t').textContent = `${fmt(p.predicted_5k)} on ${new Date(p.race_day + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}  (${gain >= 0 ? '−' : '+'}${Math.abs(gain)} s)`;
+    for (const c of [`${p.weekly_km} km per week`, `${p.runs_per_week} runs a week`,
+      `${p.hard_sessions} hard session${p.hard_sessions > 1 ? 's' : ''} a week`, `long run ${p.long_run_share} of the week`,
+      ...(p.taper_last_week ? ['easy last week'] : [])]) {
+      const s = document.createElement('span'); s.className = 'chip'; s.textContent = c; d.querySelector('.chips').appendChild(s);
+    }
+    $('plans').appendChild(d);
+  });
+}
+
+$('file').onchange = async () => {
+  const f = $('file').files[0];
+  if (!f) return;
+  if (f.size > 30e6) return status('That file is very large. Use activities.csv from your Strava archive.', false, true);
+  analyse(await f.text(), 'your runs');
+  $('file').value = '';
+};
+$('uploadBtn').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } };
+$('sampleBtn').onclick = async () => {
+  try {
+    const res = await fetch('data/sample_runs.csv', { cache: 'no-cache' });
+    analyse(await res.text(), 'the sample runner (36 weeks of pretend runs)');
+  } catch (e) { status('Could not load the sample data.', false, true); }
+};
+// Start loading Python in the background so it's ready when they click.
+if (typeof loadPyodide === 'function') loadPython().then(() => status('Ready. Upload your runs or try the sample data.', false)).catch(e => status('Could not load Python: ' + e.message, false, true));
+else status('Could not load Python. Check your internet connection and reload.', false, true);
+</script>
+</body>
+</html>
