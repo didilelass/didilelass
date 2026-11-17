@@ -62,6 +62,32 @@
   .stepper button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 20px; }
   .stepper output { min-width: 64px; text-align: center; font-weight: 700; font-size: 18px; }
   .history li { display: flex; justify-content: space-between; gap: 8px; }
+  .predict { text-align: center; }
+  .predict .big { font-size: 52px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
+  .predict svg { width: 100%; height: 70px; display: block; margin: 8px 0 4px; color: var(--accent); }
+  .tips { text-align: left; padding-left: 20px; margin: 8px 0 0; }
+  .tips li { margin: 6px 0; }
+  .linkbtn { background: none; border: 0; color: var(--accent); font: inherit; font-weight: 600; padding: 6px; }
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; background: var(--card);
+    border-top: 1px solid var(--line); padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); }
+  .tabbar button { flex: 1; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px; }
+  .tabbar button span { display: block; font-size: 22px; }
+  .tabbar button.sel { color: var(--accent); }
+  .tabbar.hidden { display: none; }
+  body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .ci-row { margin: 10px 0; }
+  .ci-label { font-weight: 600; margin-bottom: 6px; }
+  .ci-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ci-opts .chip { flex: 1; min-width: 0; padding: 0 4px; font-size: 18px; }
+  .ci-inline { display: flex; align-items: center; justify-content: space-between; }
+  .ci-inline .ci-label { margin: 0; }
+  .wrapchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  select, input[type=date], input[type=number] { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  input[type=number] { width: 90px; text-align: center; }
+  #logList li { align-items: center; } #logList .grow { flex: 1; }
+  #logList button { background: none; border: 0; color: var(--muted); font-size: 22px; padding: 0 6px; }
+  .results li button { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 4px; }
   input[type=text] { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 110px; text-align: center; }
 
   /* Run screen */
@@ -99,6 +125,7 @@
       <div class="muted" id="weekSummary"></div>
       <div class="bar"><span id="weekBar"></span></div>
     </div>
+    <div class="card predict" id="predictCard"></div>
     <div id="runList"></div>
     <div class="card">
       <h2>The rules</h2>
@@ -145,7 +172,33 @@
     <div class="card" id="doneBody"></div>
     <button class="btn" id="homeBtn">Back to my week</button>
   </section>
+  <!-- Log -->
+  <section class="screen" id="log">
+    <header><h1>📒 Log a run</h1></header>
+    <p class="muted">Add 5Ks and tempo runs you've done before (or without the app). They teach the 5K prediction about you.</p>
+    <div class="card">
+      <h2>What kind of run?</h2>
+      <div class="wrapchips" id="logTypes"></div>
+      <div class="opt-row" style="margin-top:14px"><span>Date</span><input type="date" id="logDate"></div>
+      <div class="opt-row" id="logKmRow"><span>Distance (km)</span><input type="number" id="logKm" inputmode="decimal" step="0.1" min="1"></div>
+      <div class="opt-row"><span><span id="logTimeLabel">Time</span><br><span class="muted" id="logTimeHint"></span></span>
+        <input type="text" id="logTime" inputmode="numeric" placeholder="mm:ss"></div>
+    </div>
+    <div class="card">
+      <h2>How were you feeling?</h2>
+      <p class="muted" style="margin:0">Optional. Your head and your sleep affect your running as much as your legs.</p>
+      <div id="logCheckin"></div>
+    </div>
+    <button class="btn" id="logSave">Save run</button>
+    <p class="muted" id="logSaved" style="text-align:center;min-height:20px" aria-live="polite"></p>
+    <div class="card"><h2>Logged runs</h2><ul class="steps" id="logList"></ul></div>
+  </section>
 </main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-tab="home" class="sel"><span>🏃</span>Plan</button>
+  <button data-tab="log"><span>📒</span>Log</button>
+</nav>
 
 <!-- Live run -->
 <section id="runScreen" aria-live="polite">
@@ -168,8 +221,13 @@
 // ---------- Settings & storage ----------
 const KEY = 'run-coach-v1';
 const state = (() => {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch (e) {}
-  return { week: 1, unit: 'km', voice: true, baseline: '', done: {}, history: [] };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) {
+    s.log = s.log || [];
+    for (const r of s.results || []) s.log.push({ type: '5k', date: r.date, km: 5, time: r.secs });
+    delete s.results;
+    return s;
+  } } catch (e) {}
+  return { week: 1, unit: 'km', voice: true, baseline: '', done: {}, history: [], log: [] };
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 const $ = id => document.getElementById(id);
@@ -245,8 +303,274 @@ const todayIso = () => localIso(new Date());
 const doneKey = (week, id) => `${week}:${id}`;
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  $('tabbar').classList.toggle('hidden', !['home', 'log'].includes(id));
+  document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
   window.scrollTo(0, 0);
 }
+
+// ---------- Check-in: mood, stress, sleep ----------
+const CHECKIN = [
+  { key: 'mood', label: 'Mood', opts: ['😫', '😕', '😐', '🙂', '😄'], hint: 'low … great' },
+  { key: 'stress', label: 'Stress', opts: ['😌', '🙂', '😐', '😬', '🤯'], hint: 'calm … very stressed' },
+  { key: 'sleepQ', label: 'Sleep quality', opts: ['Poor', 'Meh', 'OK', 'Good', 'Great'] },
+];
+// Draws the check-in into `box` and writes answers into `obj`; calls onChange after each tap.
+function checkinWidget(box, obj, onChange = () => {}) {
+  box.innerHTML = '';
+  for (const q of CHECKIN) {
+    const row = document.createElement('div');
+    row.className = 'ci-row';
+    row.innerHTML = `<div class="ci-label">${q.label}${q.hint ? ` <span class="muted">${q.hint}</span>` : ''}</div><div class="ci-opts"></div>`;
+    q.opts.forEach((o, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (obj[q.key] === i + 1 ? ' sel' : '');
+      b.textContent = o;
+      b.onclick = () => { obj[q.key] = obj[q.key] === i + 1 ? undefined : i + 1; checkinWidget(box, obj, onChange); onChange(); };
+      row.lastChild.appendChild(b);
+    });
+    box.appendChild(row);
+  }
+  const row = document.createElement('div');
+  row.className = 'ci-row ci-inline';
+  row.innerHTML = '<div class="ci-label">Sleep last night</div><select aria-label="Hours of sleep"></select>';
+  const sel = row.querySelector('select');
+  sel.add(new Option('– hours', ''));
+  for (let h = 4; h <= 10; h += 0.5) sel.add(new Option(`${h} h`, h));
+  sel.value = obj.sleep ?? '';
+  sel.onchange = () => { obj.sleep = sel.value ? +sel.value : undefined; onChange(); };
+  box.appendChild(row);
+}
+
+// ---------- All runs: done with the app + logged by hand ----------
+const LOG_TYPES = {
+  '5k': { name: '5K race / time trial', emoji: '🏁' },
+  tempo: { name: 'Tempo run', emoji: '🔥' },
+  long: { name: 'Long run', emoji: '🛣️' },
+  easy: { name: 'Easy run', emoji: '🙂' },
+  intervals: { name: 'Intervals', emoji: '⚡' },
+};
+function runLog() {
+  const logged = state.log.map((l, i) => ({ ...l, id: l.type === '5k' ? 'test5k' : l.type, logIndex: i,
+    result: l.type === '5k' ? l.time : undefined }));
+  return [...state.history, ...logged].sort((a, b) => a.date < b.date ? -1 : 1);
+}
+
+// ---------- 5K predictor (machine learning) ----------
+// Bayesian linear regression. It starts from what's true for most runners
+// (how repeat, tempo and long-run pace relate to 5K time, and that sleep, mood
+// and stress matter a little), then learns from each 5K result how YOUR
+// sessions, sleep and state of mind turn into YOUR race time.
+// Every 5K result is one training example: the features are the runs before it
+// plus how you felt that day; the answer is the time you ran.
+const REP_TO_5K = 1.08;   // 5K pace is about 8% slower than 400 m repeat pace,
+const TEMPO_TO_5K = 0.93; // about 7% faster than tempo pace,
+const LONG_TO_5K = 0.82;  // and about 18% faster than easy long-run pace.
+// Weights: [base, fitness level, consistency, rep fade, sleep h, sleep quality, mood, stress]
+const PRIOR_MEAN = [0, 0, 0, 0, -8, -5, -6, 6];   // seconds per unit, before seeing your data
+const PRIOR_SD = [45, 8, 40, 15, 12, 10, 10, 10];
+const NOISE_SD = 40; // how much a 5K varies day to day, in seconds
+const daysBetween = (a, b) => (new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5;
+const avgOf = a => a.reduce((x, y) => x + y, 0) / a.length;
+
+function featuresAt(date, inclusive, feel = {}) {
+  const past = runLog().filter(h => inclusive ? h.date <= date : h.date < date);
+  const within = d => past.filter(h => daysBetween(h.date, date) <= d);
+  const iv = within(21).filter(h => h.reps && h.reps.length >= 3).pop();
+  const tp = within(28).filter(h => h.id === 'tempo' && h.km && h.time).pop();
+  const lg = within(28).filter(h => h.id === 'long' && h.km && h.time).pop();
+  const last5k = within(42).filter(h => h.result).pop();
+  const f = { fade: 0, keyRuns: within(28).filter(h => !['optional', 'test5k'].includes(h.id)).length };
+  if (iv) { f.fromReps = avgOf(iv.reps) * 12.5 * REP_TO_5K; f.fade = iv.reps[iv.reps.length - 1] / iv.reps[0] - 1; }
+  if (tp) f.fromTempo = tp.time / tp.km * 5 * TEMPO_TO_5K;
+  if (lg) f.fromLong = lg.time / lg.km * 5 * LONG_TO_5K;
+  if (last5k) f.fromLast5k = last5k.result;
+  const parts = [f.fromReps, f.fromTempo, f.fromLong, f.fromLast5k].filter(Boolean);
+  if (!parts.length) return null;
+  f.blend = avgOf(parts);
+  f.consistency = Math.min(f.keyRuns / 16, 1.25); // 4 key runs a week = 1
+  const c = (v, mid) => v == null ? 0 : v - mid; // unknown = a normal day
+  f.z = [1, (f.blend - 1800) / 60, f.consistency - 0.75, f.fade * 10,
+    c(feel.sleep, 7.5), c(feel.sleepQ, 3), c(feel.mood, 3), c(feel.stress, 3)];
+  return f;
+}
+
+function solve(A, b) { // Gauss-Jordan: returns A⁻¹ and A⁻¹b
+  const n = b.length, M = A.map((row, i) => [...row, ...row.map((_, j) => +(i === j))]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c]; for (let k = 0; k < 2 * n; k++) M[c][k] /= d;
+    for (let r = 0; r < n; r++) if (r !== c) { const m = M[r][c]; for (let k = 0; k < 2 * n; k++) M[r][k] -= m * M[c][k]; }
+  }
+  const inv = M.map(row => row.slice(n));
+  return { inv, x: inv.map(row => row.reduce((s, v, j) => s + v * b[j], 0)) };
+}
+
+function trainModel() {
+  const n = PRIOR_SD.length;
+  const A = PRIOR_SD.map((sd, i) => PRIOR_SD.map((_, j) => i === j ? 1 / sd ** 2 : 0));
+  const b = PRIOR_MEAN.map((m, i) => m / PRIOR_SD[i] ** 2);
+  let examples = 0, withFeel = 0;
+  for (const r of runLog().filter(h => h.result)) {
+    const f = featuresAt(r.date, false, r);
+    if (!f) continue;
+    examples++;
+    if (r.sleep != null || r.mood != null || r.stress != null || r.sleepQ != null) withFeel++;
+    for (let i = 0; i < n; i++) {
+      b[i] += f.z[i] * (r.result - f.blend) / NOISE_SD ** 2;
+      for (let j = 0; j < n; j++) A[i][j] += f.z[i] * f.z[j] / NOISE_SD ** 2;
+    }
+  }
+  const { inv, x } = solve(A, b);
+  return { w: x, cov: inv, examples, withFeel };
+}
+
+function predict5k(date = todayIso(), model = trainModel(), feel = {}) {
+  const f = featuresAt(date, true, feel);
+  if (!f) return null;
+  const adj = f.z.reduce((s, v, i) => s + v * model.w[i], 0);
+  const v = NOISE_SD ** 2 + f.z.reduce((s, zi, i) => s + zi * f.z.reduce((t, zj, j) => t + model.cov[i][j] * zj, 0), 0);
+  return { mean: f.blend + adj, sd: Math.sqrt(v), f, model, adj };
+}
+
+function tipsFor(p) {
+  const t = [], f = p.f, m = p.model;
+  const speed = f.fromReps, endure = f.fromLong;
+  if (speed && endure && endure - speed > 90)
+    t.push('Your speed is ahead of your endurance. The long run and easy runs will help you most right now.');
+  if (speed && endure && speed - endure > 60)
+    t.push('Your endurance is ahead of your speed. Make the intervals count: they will help you most.');
+  if (f.fade > 0.06)
+    t.push(`Your last 400 m was ${Math.round(f.fade * 100)}% slower than your first. Start the first repeats a little slower and keep them even.`);
+  if (f.keyRuns < 10)
+    t.push(`You did ${f.keyRuns} key run${f.keyRuns === 1 ? "" : "s"} in the last 4 weeks. Running regularly is the biggest win: aim for 4 a week.`);
+  // Mind and sleep, from your last week of check-ins.
+  const week = runLog().filter(h => daysBetween(h.date, todayIso()) <= 7);
+  const sleeps = week.map(h => h.sleep).filter(v => v != null);
+  const stress = week.map(h => h.stress).filter(v => v != null);
+  const moods = week.map(h => h.mood).filter(v => v != null);
+  if (sleeps.length && avgOf(sleeps) < 7)
+    t.push(`You've averaged ${avgOf(sleeps).toFixed(1)} h of sleep this week. Sleep is when your body absorbs training: aim for 7–9 h, especially before hard days.`);
+  if (stress.length && avgOf(stress) >= 3.8)
+    t.push("Your stress has been high this week. Stress tires you like training does: it's fine to swap a hard run for an easy one.");
+  if (moods.length && avgOf(moods) <= 2.2)
+    t.push('Your mood has been low lately. Easy runs with no watch, or with a friend, can help. Be kind to yourself.');
+  if (m.withFeel >= 3) {
+    const perHour = -m.w[4], perMood = -m.w[6];
+    t.push(`What I've learned about you: each extra hour of sleep is worth about ${Math.round(perHour)} s on your 5K, and a better mood about ${Math.round(perMood)} s per step.`);
+  } else {
+    t.push(`Fill in mood, stress and sleep when you log a 5K. After 3, I'll learn how they affect your race (${m.withFeel} so far).`);
+  }
+  if (m.examples && Math.abs(m.w[0]) >= 10)
+    t.push(`From your ${m.examples} 5K result${m.examples > 1 ? 's' : ''}, you race about ${fmt(Math.abs(m.w[0]))} ${m.w[0] < 0 ? 'faster' : 'slower'} than your training suggests. The prediction takes that into account.`);
+  if (!f.fromReps) t.push('Do an interval session with the app (tap Finish at each 400 m) to sharpen the prediction.');
+  return t;
+}
+
+function sparkline(model) {
+  const dates = [...new Set(runLog().map(h => h.date))];
+  const pts = dates.map(d => ({ d, p: predict5k(d, model) })).filter(x => x.p).map(x => ({ d: x.d, y: x.p.mean }));
+  if (pts.length < 2) return '';
+  const res = runLog().filter(r => r.result && r.date >= pts[0].d);
+  const all = [...pts.map(p => p.y), ...res.map(r => r.result)];
+  const lo = Math.min(...all) - 15, hi = Math.max(...all) + 15;
+  const t0 = pts[0].d, span = Math.max(1, daysBetween(t0, pts[pts.length - 1].d));
+  const X = d => (daysBetween(t0, d) / span * 290 + 5).toFixed(1), Y = v => ((v - lo) / (hi - lo) * 60 + 5).toFixed(1);
+  return `<svg viewBox="0 0 300 70" preserveAspectRatio="none" role="img" aria-label="Predicted 5K over time">
+    <polyline fill="none" stroke="currentColor" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"
+      points="${pts.map(p => X(p.d) + ',' + Y(p.y)).join(' ')}"/>
+    ${res.map(r => `<circle cx="${X(r.date)}" cy="${Y(r.result)}" r="4" fill="var(--text)"/>`).join('')}
+  </svg><div class="muted" style="font-size:13px">Line: predicted 5K (higher is faster) · dots: your real 5K results</div>`;
+}
+
+function renderPredict() {
+  const card = $('predictCard');
+  const p = predict5k();
+  let html = '<h2>🔮 Your 5K prediction</h2>';
+  if (!p) {
+    html += `<p class="muted">Log a past 5K or tempo run, or do an interval session or long run with the app,
+      and I'll predict your 5K time. It gets more accurate with every run you add.</p>`;
+  } else {
+    const r = Math.max(10, Math.round(p.sd / 5) * 5);
+    html += `<div class="big">${fmt(p.mean)}</div>
+      <div class="muted">likely between ${fmt(p.mean - r)} and ${fmt(p.mean + r)} · ${fmt(p.mean / 5)} /km · on a normal day</div>
+      ${sparkline(p.model)}<ul class="tips"></ul>
+      <p class="muted" style="font-size:13px">Learned from ${p.model.examples} of your 5K results.
+      ${p.model.examples < 3 ? 'Log more 5K times (a time trial, a race, a parkrun) and it learns how you race.' : ''}</p>`;
+  }
+  html += '<button class="linkbtn" id="toLog">📒 Log a past run</button>';
+  card.innerHTML = html;
+  if (p) { const ul = card.querySelector('.tips'); tipsFor(p).forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); }); }
+  $('toLog').onclick = () => openTab('log');
+}
+
+// ---------- Log tab ----------
+let draft = null;
+function newDraft(type = '5k') { return { type, date: todayIso(), km: type === '5k' ? 5 : type === 'tempo' ? 4 : type === 'long' ? 8 : 5 }; }
+function renderLog() {
+  if (!draft) draft = newDraft();
+  const types = $('logTypes');
+  types.innerHTML = '';
+  for (const [k, t] of Object.entries(LOG_TYPES)) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (draft.type === k ? ' sel' : '');
+    b.textContent = `${t.emoji} ${t.name}`;
+    b.onclick = () => { const keep = { ...draft }; draft = { ...keep, ...newDraft(k), date: keep.date, time: undefined };
+      for (const q of ['mood', 'stress', 'sleepQ', 'sleep']) draft[q] = keep[q]; renderLog(); };
+    types.appendChild(b);
+  }
+  $('logDate').value = draft.date;
+  $('logKm').value = draft.km;
+  $('logKmRow').hidden = draft.type === '5k';
+  $('logTime').value = draft.time ? fmt(draft.time) : '';
+  $('logTimeLabel').textContent = draft.type === '5k' ? 'Your 5K time' : draft.type === 'tempo' ? 'Time for the tempo part' : 'Time';
+  $('logTimeHint').textContent = draft.type === 'tempo' ? 'Just the fast part, without warm-up and cool-down' : 'minutes:seconds, e.g. 29:45';
+  checkinWidget($('logCheckin'), draft);
+
+  const ul = $('logList');
+  ul.innerHTML = '';
+  if (!state.log.length) ul.innerHTML = '<li class="muted">Nothing logged yet.</li>';
+  state.log.map((l, i) => ({ ...l, i })).sort((a, b) => a.date < b.date ? 1 : -1).forEach(l => {
+    const li = document.createElement('li');
+    const d = new Date(l.date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const feel = [l.mood && CHECKIN[0].opts[l.mood - 1], l.stress && 'stress ' + CHECKIN[1].opts[l.stress - 1],
+      l.sleep && `${l.sleep} h sleep`].filter(Boolean).join(' · ');
+    li.innerHTML = '<span class="grow"><strong></strong><br><span class="muted"></span></span><button aria-label="Delete">×</button>';
+    li.querySelector('strong').textContent = `${LOG_TYPES[l.type].emoji} ${l.type === '5k' ? '5K' : `${l.km} km ${LOG_TYPES[l.type].name.toLowerCase()}`} · ${fmt(l.time)}`;
+    li.querySelector('.muted').textContent = d + (feel ? ' · ' + feel : '');
+    li.querySelector('button').onclick = () => { if (confirm('Delete this run?')) { state.log.splice(l.i, 1); save(); renderLog(); } };
+    ul.appendChild(li);
+  });
+}
+$('logDate').onchange = () => { draft.date = $('logDate').value || todayIso(); };
+$('logKm').onchange = () => { draft.km = Math.max(1, Math.min(50, +$('logKm').value || draft.km)); };
+$('logTime').onchange = () => { draft.time = parseTime($('logTime').value) || undefined; };
+$('logSave').onclick = () => {
+  draft.date = $('logDate').value || todayIso();
+  draft.km = draft.type === '5k' ? 5 : +$('logKm').value;
+  draft.time = parseTime($('logTime').value);
+  if (!draft.time) return alert('Add your time as minutes:seconds, e.g. 29:45');
+  if (!(draft.km > 0)) return alert('Add the distance in km');
+  const pace = draft.time / draft.km;
+  if (pace < 150 || pace > 720) return alert(`That's ${fmt(pace)} per km. Check the time and distance.`);
+  if (draft.date > todayIso()) return alert("That date is in the future.");
+  const entry = { type: draft.type, date: draft.date, km: draft.km, time: draft.time };
+  for (const q of ['mood', 'stress', 'sleepQ', 'sleep']) if (draft[q] != null) entry[q] = draft[q];
+  state.log.push(entry);
+  save();
+  draft = newDraft(draft.type);
+  renderLog();
+  $('logSaved').textContent = '✓ Saved. Your prediction is updated.';
+  setTimeout(() => $('logSaved').textContent = '', 3000);
+};
+
+// ---------- Tabs ----------
+function openTab(id) {
+  document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('sel', b.dataset.tab === id));
+  if (id === 'log') renderLog(); else renderHome();
+  show(id);
+}
+document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => openTab(b.dataset.tab));
 
 // ---------- Home ----------
 function renderHome() {
@@ -270,6 +594,7 @@ function renderHome() {
     b.onclick = () => openDetail(r.id);
     $('runList').appendChild(b);
   }
+  renderPredict();
   const h = $('history');
   h.innerHTML = '';
   if (!state.history.length) h.innerHTML = '<li class="muted">No runs yet. Pick one above to start.</li>';
@@ -486,6 +811,7 @@ $('skipBtn').onclick = () => {
   if (!run) return;
   const p = run.phases[run.i];
   if (p.stopwatch) run.result = (now() - run.phaseStart) / 1000;
+  if (p.pace === 'rep') (run.reps = run.reps || []).push((now() - run.phaseStart) / 1000);
   if (run.pausedAt) $('pauseBtn').click();
   nextPhase();
 };
@@ -511,9 +837,20 @@ function finishRun({ manual }) {
   if (run && !manual) {
     entry.time = (now() - run.started) / 1000;
     if (run.result) entry.result = run.result;
+    const reps = (run.reps || []).filter(t => t > 50 && t < 240);
+    if (reps.length) entry.reps = reps.map(t => Math.round(t * 10) / 10);
     stopRun();
     say(r.id === 'test5k' && entry.result ? `Done! Your 5K time is ${fmt(entry.result).replace(':', ' minutes ')} seconds.` : 'Run complete. Great job!');
     beep(784, 150); beep(988, 150, .18); beep(1318, 400, .36);
+  }
+  if (r.id === 'long') entry.km = optVal;
+  if (manual && r.id === 'test5k') {
+    const t = parseTime(prompt('Your 5K time? (minutes:seconds, e.g. 29:45)') || '');
+    if (t) entry.result = t;
+  }
+  if (manual && r.id === 'long') {
+    const t = parseTime(prompt(`How long did your ${optVal} km take? (minutes:seconds, e.g. 52:30, optional)`) || '');
+    if (t) entry.time = t;
   }
   run = null;
   state.done[doneKey(state.week, r.id)] = true;
@@ -541,6 +878,12 @@ function finishRun({ manual }) {
     line(left.length ? `Still to do this week: ${left.map(x => x.name.replace(/^Run \d · /, '')).join(', ')}.` : 'Every key run done this week. 💪', 'muted');
     if (r.hard) line('Tomorrow: an easy day or rest.', 'muted');
   }
+  const pr = predict5k();
+  if (pr) line(`🔮 Your predicted 5K is now ${fmt(pr.mean)}.`);
+  const ci = document.createElement('div');
+  ci.innerHTML = '<h2 style="margin-top:14px">How are you feeling?</h2><p class="muted" style="margin:0">Optional. Helps the coach learn what works for you.</p><div></div>';
+  body.appendChild(ci);
+  checkinWidget(ci.lastChild, entry, save);
   show('done');
 }
 $('homeBtn').onclick = () => { renderHome(); show('home'); };
