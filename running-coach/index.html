@@ -62,6 +62,13 @@
   .stepper button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 20px; }
   .stepper output { min-width: 64px; text-align: center; font-weight: 700; font-size: 18px; }
   .history li { display: flex; justify-content: space-between; gap: 8px; }
+  .predict { text-align: center; }
+  .predict .big { font-size: 52px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
+  .predict svg { width: 100%; height: 70px; display: block; margin: 8px 0 4px; color: var(--accent); }
+  .tips { text-align: left; padding-left: 20px; margin: 8px 0 0; }
+  .tips li { margin: 6px 0; }
+  .linkbtn { background: none; border: 0; color: var(--accent); font: inherit; font-weight: 600; padding: 6px; }
+  .results li button { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 4px; }
   input[type=text] { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 110px; text-align: center; }
 
   /* Run screen */
@@ -99,6 +106,7 @@
       <div class="muted" id="weekSummary"></div>
       <div class="bar"><span id="weekBar"></span></div>
     </div>
+    <div class="card predict" id="predictCard"></div>
     <div id="runList"></div>
     <div class="card">
       <h2>The rules</h2>
@@ -168,8 +176,8 @@
 // ---------- Settings & storage ----------
 const KEY = 'run-coach-v1';
 const state = (() => {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return s; } catch (e) {}
-  return { week: 1, unit: 'km', voice: true, baseline: '', done: {}, history: [] };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.done) return { results: [], ...s }; } catch (e) {}
+  return { week: 1, unit: 'km', voice: true, baseline: '', done: {}, history: [], results: [] };
 })();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 const $ = id => document.getElementById(id);
@@ -248,6 +256,163 @@ function show(id) {
   window.scrollTo(0, 0);
 }
 
+// ---------- 5K predictor (machine learning) ----------
+// Bayesian linear regression. It starts from what's true for most runners
+// (how 400 m repeat pace and easy long-run pace relate to 5K time), then learns
+// from each 5K result you log how YOUR sessions turn into YOUR race time.
+// Every 5K result is one training example: the features are the sessions before it,
+// the answer is the time you ran.
+const REP_TO_5K = 1.08;   // 5K pace is about 8% slower than 400 m repeat pace
+const LONG_TO_5K = 0.82;  // and about 18% faster than easy long-run pace
+const PRIOR_SD = [45, 8, 40, 15]; // how far each learned weight may move from 0, in seconds
+const NOISE_SD = 40;      // how much a 5K varies day to day, in seconds
+const daysBetween = (a, b) => (new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5;
+
+function featuresAt(date, inclusive) {
+  const past = state.history.filter(h => inclusive ? h.date <= date : h.date < date);
+  const within = d => past.filter(h => daysBetween(h.date, date) <= d);
+  const iv = within(21).filter(h => h.reps && h.reps.length >= 3).pop();
+  const lg = within(28).filter(h => h.id === 'long' && h.km && h.time).pop();
+  if (!iv && !lg) return null;
+  const f = { fade: 0, keyRuns: within(28).filter(h => !['optional', 'test5k'].includes(h.id)).length };
+  if (iv) {
+    const avg = iv.reps.reduce((a, b) => a + b) / iv.reps.length;
+    f.fromReps = avg * 12.5 * REP_TO_5K;
+    f.fade = iv.reps[iv.reps.length - 1] / iv.reps[0] - 1;
+  }
+  if (lg) f.fromLong = lg.time / lg.km * 5 * LONG_TO_5K;
+  const parts = [f.fromReps, f.fromLong].filter(Boolean);
+  f.blend = parts.reduce((a, b) => a + b) / parts.length;
+  f.consistency = Math.min(f.keyRuns / 16, 1.25); // 4 key runs a week = 1
+  // What the model multiplies its weights by.
+  f.z = [1, (f.blend - 1800) / 60, f.consistency - 0.75, f.fade * 10];
+  return f;
+}
+
+function allResults() {
+  return [
+    ...state.history.filter(h => h.result).map(h => ({ date: h.date, secs: h.result, fromApp: true })),
+    ...state.results.map((r, i) => ({ ...r, index: i })),
+  ].sort((a, b) => a.date < b.date ? -1 : 1);
+}
+
+function solve(A, b) { // Gauss-Jordan: returns A⁻¹ and A⁻¹b
+  const n = b.length, M = A.map((row, i) => [...row, ...row.map((_, j) => +(i === j))]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c]; for (let k = 0; k < 2 * n; k++) M[c][k] /= d;
+    for (let r = 0; r < n; r++) if (r !== c) { const m = M[r][c]; for (let k = 0; k < 2 * n; k++) M[r][k] -= m * M[c][k]; }
+  }
+  const inv = M.map(row => row.slice(n));
+  return { inv, x: inv.map(row => row.reduce((s, v, j) => s + v * b[j], 0)) };
+}
+
+function trainModel() {
+  const n = PRIOR_SD.length;
+  const A = PRIOR_SD.map((sd, i) => PRIOR_SD.map((_, j) => i === j ? 1 / sd ** 2 : 0));
+  const b = new Array(n).fill(0);
+  let examples = 0;
+  for (const r of allResults()) {
+    const f = featuresAt(r.date, false);
+    if (!f) continue;
+    examples++;
+    const resid = r.secs - f.blend; // what the general rule got wrong for you
+    for (let i = 0; i < n; i++) {
+      b[i] += f.z[i] * resid / NOISE_SD ** 2;
+      for (let j = 0; j < n; j++) A[i][j] += f.z[i] * f.z[j] / NOISE_SD ** 2;
+    }
+  }
+  const { inv, x } = solve(A, b);
+  return { w: x, cov: inv, examples };
+}
+
+function predict5k(date = todayIso(), model = trainModel()) {
+  const f = featuresAt(date, true);
+  if (!f) return null;
+  const adj = f.z.reduce((s, v, i) => s + v * model.w[i], 0);
+  const v = NOISE_SD ** 2 + f.z.reduce((s, zi, i) => s + zi * f.z.reduce((t, zj, j) => t + model.cov[i][j] * zj, 0), 0);
+  return { mean: f.blend + adj, sd: Math.sqrt(v), f, model, adj };
+}
+
+function tipsFor(p) {
+  const t = [], f = p.f;
+  if (f.fromReps && f.fromLong && f.fromLong - f.fromReps > 90)
+    t.push('Your speed is ahead of your endurance. The long run and easy runs will help you most right now.');
+  if (f.fromReps && f.fromLong && f.fromReps - f.fromLong > 60)
+    t.push('Your endurance is ahead of your speed. Make the intervals count: they will help you most.');
+  if (f.fade > 0.06)
+    t.push(`Your last 400 m was ${Math.round(f.fade * 100)}% slower than your first. Start the first repeats a little slower and keep them even.`);
+  if (f.keyRuns < 10)
+    t.push(`You did ${f.keyRuns} key runs in the last 4 weeks. Running regularly is the biggest win: aim for 4 a week.`);
+  if (p.model.examples && Math.abs(p.model.w[0]) >= 10)
+    t.push(`From your ${p.model.examples} 5K result${p.model.examples > 1 ? 's' : ''}, you race about ${fmt(Math.abs(p.model.w[0]))} ${p.model.w[0] < 0 ? 'faster' : 'slower'} than your sessions suggest. The prediction now takes that into account.`);
+  if (!f.fromReps) t.push('Do an interval session with the app (tap Finish at each 400 m) to sharpen the prediction.');
+  if (!f.fromLong) t.push('Do a long run with the app to sharpen the prediction.');
+  return t;
+}
+
+function sparkline(model) {
+  const dates = [...new Set(state.history.map(h => h.date))];
+  const pts = dates.map(d => ({ d, p: predict5k(d, model) })).filter(x => x.p).map(x => ({ d: x.d, y: x.p.mean }));
+  const res = allResults().filter(r => !pts.length || r.date >= pts[0].d);
+  if (pts.length < 2) return '';
+  const all = [...pts.map(p => p.y), ...res.map(r => r.secs)];
+  const lo = Math.min(...all) - 15, hi = Math.max(...all) + 15;
+  const t0 = pts[0].d, span = Math.max(1, daysBetween(t0, pts[pts.length - 1].d));
+  const X = d => (daysBetween(t0, d) / span * 290 + 5).toFixed(1), Y = v => ((v - lo) / (hi - lo) * 60 + 5).toFixed(1);
+  return `<svg viewBox="0 0 300 70" preserveAspectRatio="none" role="img" aria-label="Predicted 5K over time">
+    <polyline fill="none" stroke="currentColor" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"
+      points="${pts.map(p => X(p.d) + ',' + Y(p.y)).join(' ')}"/>
+    ${res.map(r => `<circle cx="${X(r.date)}" cy="${Y(r.secs)}" r="4" fill="var(--text)"/>`).join('')}
+  </svg><div class="muted" style="font-size:13px">Line: predicted 5K (higher is faster) · dots: your real 5K results</div>`;
+}
+
+function renderPredict() {
+  const card = $('predictCard');
+  const p = predict5k();
+  const results = allResults();
+  let html = '<h2>🔮 Your 5K prediction</h2>';
+  if (!p) {
+    html += `<p class="muted">Do an interval session or a long run with the app, and I'll predict your 5K time.
+      It gets more accurate with every session and every 5K result.</p>`;
+  } else {
+    const r = Math.max(10, Math.round(p.sd / 5) * 5);
+    html += `<div class="big">${fmt(p.mean)}</div>
+      <div class="muted">likely between ${fmt(p.mean - r)} and ${fmt(p.mean + r)} · ${fmt(p.mean / 5)} /km</div>
+      ${sparkline(p.model)}
+      <ul class="tips">${tipsFor(p).map(t => `<li></li>`).join('')}</ul>
+      <p class="muted" style="font-size:13px">Learned from ${p.model.examples} of your 5K results.
+      ${p.model.examples < 3 ? 'Log more 5K times (a time trial, a race, a parkrun) and it learns how you race.' : ''}</p>`;
+  }
+  html += `<ul class="steps results" style="text-align:left"></ul>
+    <button class="linkbtn" id="addResult">+ Add a 5K result</button>`;
+  card.innerHTML = html;
+  if (p) card.querySelectorAll('.tips li').forEach((li, i) => li.textContent = tipsFor(p)[i]);
+  const ul = card.querySelector('.results');
+  results.slice(-5).reverse().forEach(r => {
+    const li = document.createElement('li');
+    const d = new Date(r.date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    li.innerHTML = '<span></span><span class="muted"></span>';
+    li.firstChild.textContent = `🏁 5K ${fmt(r.secs)}`;
+    li.lastChild.textContent = d + (r.fromApp ? ' · time trial' : '');
+    if (!r.fromApp) {
+      const x = document.createElement('button'); x.textContent = '×'; x.setAttribute('aria-label', 'Remove');
+      x.onclick = () => { if (confirm('Remove this 5K result?')) { state.results.splice(r.index, 1); save(); renderHome(); } };
+      li.lastChild.appendChild(x);
+    }
+    ul.appendChild(li);
+  });
+  $('addResult').onclick = () => {
+    const t = parseTime(prompt('Your 5K time? (minutes:seconds, e.g. 29:45)') || '');
+    if (!t) return;
+    let d = (prompt('Date (YYYY-MM-DD)?', todayIso()) || '').trim();
+    if (!/^\d{4}-\d\d-\d\d$/.test(d)) d = todayIso();
+    state.results.push({ date: d, secs: t });
+    save(); renderHome();
+  };
+}
+
 // ---------- Home ----------
 function renderHome() {
   $('weekLabel').textContent = `Week ${state.week} of 4`;
@@ -270,6 +435,7 @@ function renderHome() {
     b.onclick = () => openDetail(r.id);
     $('runList').appendChild(b);
   }
+  renderPredict();
   const h = $('history');
   h.innerHTML = '';
   if (!state.history.length) h.innerHTML = '<li class="muted">No runs yet. Pick one above to start.</li>';
@@ -486,6 +652,7 @@ $('skipBtn').onclick = () => {
   if (!run) return;
   const p = run.phases[run.i];
   if (p.stopwatch) run.result = (now() - run.phaseStart) / 1000;
+  if (p.pace === 'rep') (run.reps = run.reps || []).push((now() - run.phaseStart) / 1000);
   if (run.pausedAt) $('pauseBtn').click();
   nextPhase();
 };
@@ -511,9 +678,20 @@ function finishRun({ manual }) {
   if (run && !manual) {
     entry.time = (now() - run.started) / 1000;
     if (run.result) entry.result = run.result;
+    const reps = (run.reps || []).filter(t => t > 50 && t < 240);
+    if (reps.length) entry.reps = reps.map(t => Math.round(t * 10) / 10);
     stopRun();
     say(r.id === 'test5k' && entry.result ? `Done! Your 5K time is ${fmt(entry.result).replace(':', ' minutes ')} seconds.` : 'Run complete. Great job!');
     beep(784, 150); beep(988, 150, .18); beep(1318, 400, .36);
+  }
+  if (r.id === 'long') entry.km = optVal;
+  if (manual && r.id === 'test5k') {
+    const t = parseTime(prompt('Your 5K time? (minutes:seconds, e.g. 29:45)') || '');
+    if (t) entry.result = t;
+  }
+  if (manual && r.id === 'long') {
+    const t = parseTime(prompt(`How long did your ${optVal} km take? (minutes:seconds, e.g. 52:30, optional)`) || '');
+    if (t) entry.time = t;
   }
   run = null;
   state.done[doneKey(state.week, r.id)] = true;
@@ -541,6 +719,8 @@ function finishRun({ manual }) {
     line(left.length ? `Still to do this week: ${left.map(x => x.name.replace(/^Run \d · /, '')).join(', ')}.` : 'Every key run done this week. 💪', 'muted');
     if (r.hard) line('Tomorrow: an easy day or rest.', 'muted');
   }
+  const pr = predict5k();
+  if (pr) line(`🔮 Your predicted 5K is now ${fmt(pr.mean)}.`);
   show('done');
 }
 $('homeBtn').onclick = () => { renderHome(); show('home'); };
