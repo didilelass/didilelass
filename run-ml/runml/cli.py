@@ -76,7 +76,7 @@ def main():
                             ("predict", cmd_predict, "predict your 5K today"),
                             ("plan", cmd_plan, "find the best 4-week plan")]:
         p = sub.add_parser(name, help=help_)
-        p.add_argument("csv", help="your run log (CSV, or a Strava activities.csv)")
+        p.add_argument("csv", help="your run log (your own CSV, or an export from a running app or watch)")
         p.add_argument("--model", default="model.pkl", help="where the model is saved")
         if name == "plan":
             p.add_argument("--top", type=int, default=5)

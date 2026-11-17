@@ -1,4 +1,4 @@
-"""Load a run log from CSV (your own format, or a Strava/Garmin export)."""
+"""Load a run log from CSV (your own format, or an export from a running app or watch)."""
 from __future__ import annotations
 
 import numpy as np
@@ -31,13 +31,13 @@ def _parse_hms(value) -> float:
 def load_runs(path: str) -> pd.DataFrame:
     raw = pd.read_csv(path)
     raw.columns = [c.strip().lower() for c in raw.columns]
-    # Strava has both; moving time leaves out stops at traffic lights.
+    # Some exports have both; moving time leaves out stops at traffic lights.
     if "moving time" in raw.columns and "elapsed time" in raw.columns:
         raw = raw.drop(columns=["elapsed time"])
     df = raw.rename(columns={c: ALIASES[c] for c in raw.columns if c in ALIASES})
     df = df.loc[:, ~df.columns.duplicated()]
 
-    # Strava/Garmin exports contain rides, swims... keep runs only.
+    # App exports also contain rides, swims... keep runs only.
     if "activity_type" in df:
         df = df[df["activity_type"].astype(str).str.contains("run", case=False)]
 
@@ -55,7 +55,7 @@ def load_runs(path: str) -> pd.DataFrame:
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce", format="mixed").dt.normalize()
     df["distance_km"] = pd.to_numeric(df["distance_km"], errors="coerce")
-    # Garmin/Strava sometimes give metres.
+    # Some exports give metres.
     if df["distance_km"].median() > 200:
         df["distance_km"] /= 1000
     df["duration_min"] = pd.to_numeric(df["duration_min"], errors="coerce")
