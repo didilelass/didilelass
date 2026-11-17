@@ -140,6 +140,16 @@
       <h2>Recent runs</h2>
       <ul class="steps history" id="history"></ul>
     </div>
+    <div class="card" id="paceCard">
+      <h2>🎯 Your paces</h2>
+      <p class="muted" style="margin:0">Worked out from a 5K time, so the plan fits your level.</p>
+      <div class="opt-row"><span>Base them on</span>
+        <span><button class="chip" data-pmode="auto">My prediction</button> <button class="chip" data-pmode="manual">A time I choose</button></span></div>
+      <div class="opt-row" id="pace5kRow"><span>Your 5K time<br><span class="muted">e.g. 2835 for 28:35</span></span>
+        <input type="text" id="pace5k" inputmode="numeric" placeholder="e.g. 2835"></div>
+      <ul class="steps" id="paceList"></ul>
+      <p class="muted" id="paceFrom" style="margin:6px 0 0"></p>
+    </div>
     <div class="card">
       <h2>Settings</h2>
       <div class="opt-row"><span>Pace units</span>
@@ -234,12 +244,31 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } c
 const $ = id => document.getElementById(id);
 
 // ---------- Paces ----------
-const PACE = {
-  rep:   { km: '5:15–5:25 /km', mi: '8:30–8:45 /mi' },
-  tempo: { km: '6:05–6:15 /km', mi: '9:45–10:00 /mi' },
-  easy:  { km: '6:45–7:15 /km', mi: '11:00–11:40 /mi' },
-};
-const pace = k => k && PACE[k] ? PACE[k][state.unit] : '';
+// Every pace comes from one 5K time, so the plan fits each runner's level.
+// Same ratios the 5K model uses: 400 m repeats ~8% faster than 5K pace,
+// tempo ~7% slower, easy ~22% slower.
+const DEFAULT_5K = 28 * 60 + 45; // the plan's original paces
+const PACE_FACTOR = { rep: 1 / 1.08, tempo: 1 / 0.93, easy: 1 / 0.82 };
+const PACE_SPREAD = { rep: 5, tempo: 5, easy: 15 }; // ± seconds per km
+function paceBase() {
+  if (state.paceMode === 'manual' && state.pace5k) return { secs: state.pace5k, from: 'the 5K time you chose' };
+  const p = predict5k();
+  if (p) return { secs: p.mean, from: 'your predicted 5K. They update as you get fitter' };
+  const b = parseTime(state.baseline);
+  if (b) return { secs: b, from: 'your 5K before the plan' };
+  return { secs: DEFAULT_5K, from: 'a 28:45 5K. Enter your own time below so they fit you', isDefault: true };
+}
+function paceRange(k, base = paceBase().secs) { // seconds per km
+  const mid = base / 5 * PACE_FACTOR[k];
+  return [mid - PACE_SPREAD[k], mid + PACE_SPREAD[k]];
+}
+const round5 = s => Math.round(s / 5) * 5;
+function pace(k, base) {
+  if (!PACE_FACTOR[k]) return '';
+  const f = state.unit === 'mi' ? 1.609344 : 1;
+  const [lo, hi] = paceRange(k, base);
+  return `${fmt(round5(lo * f))}–${fmt(round5(hi * f))} /${state.unit}`;
+}
 const kmLabel = km => state.unit === 'km' ? `${km} km` : `${km} km (${(km * 0.621).toFixed(1)} mi)`;
 
 // ---------- The plan ----------
@@ -256,8 +285,9 @@ const RUNS = [
     build: o => {
       const p = [warm];
       for (let i = 1; i <= o.reps; i++) {
-        p.push({ label: `Repeat ${i} of ${o.reps}`, sub: '400 m fast', kind: 'hard', secs: 130, pace: 'rep', open: true,
-          note: 'About 2:06–2:10. Tap Finish when you hit 400 m.',
+        const [lo, hi] = paceRange('rep');
+        p.push({ label: `Repeat ${i} of ${o.reps}`, sub: '400 m fast', kind: 'hard', secs: Math.round(hi * 0.4), pace: 'rep', open: true,
+          note: `About ${fmt(lo * 0.4)}–${fmt(hi * 0.4)}. Tap Finish when you hit 400 m.`,
           say: `Repeat ${i} of ${o.reps}. 400 metres. Go!` });
         if (i < o.reps) p.push({ label: 'Recover', sub: 'Walk or jog slowly', kind: 'rest', secs: 90, say: 'Recover. 90 seconds, walk or jog slowly.' });
       }
@@ -278,9 +308,9 @@ const RUNS = [
   { id: 'long', name: 'Run 4 · Long run', emoji: '🛣️', kind: 'easy',
     desc: 'All at easy pace. This builds your endurance.',
     opt: { key: 'km', label: 'Distance', min: 7, max: 10, def: 7, fmt: v => kmLabel(v) },
-    build: o => [{ label: `Long run · ${kmLabel(o.km)}`, sub: 'All easy', kind: 'easy', secs: o.km * 7 * 60, pace: 'easy', open: true, checkIn: true,
-      note: `About ${o.km * 7} minutes at easy pace. Tap Finish when you've done ${o.km} km.`,
-      say: `Long run, ${o.km} kilometres, all at easy pace.` }] },
+    build: o => { const easy = avgOf(paceRange('easy')); return [{ label: `Long run · ${kmLabel(o.km)}`, sub: 'All easy', kind: 'easy', secs: Math.round(o.km * easy), pace: 'easy', open: true, checkIn: true,
+      note: `About ${Math.round(o.km * easy / 60)} minutes at easy pace. Tap Finish when you've done ${o.km} km.`,
+      say: `Long run, ${o.km} kilometres, all at easy pace.` }]; } },
   { id: 'optional', name: 'Run 5 · Optional easy', emoji: '🌿', kind: 'easy', optional: true,
     desc: "Another easy run, or skip it if your legs are tired.",
     opt: { key: 'mins', label: 'Length', min: 20, max: 30, step: 5, def: 20, fmt: v => `${v} min` },
@@ -629,11 +659,42 @@ function renderHome() {
   document.querySelectorAll('[data-unit]').forEach(b => b.classList.toggle('sel', b.dataset.unit === state.unit));
   document.querySelectorAll('[data-voice]').forEach(b => b.classList.toggle('sel', (b.dataset.voice === 'on') === state.voice));
   $('baseline').value = state.baseline || '';
+  renderPaces();
 }
 $('prevWeek').onclick = () => { state.week--; save(); renderHome(); };
 $('nextWeek').onclick = () => { state.week++; save(); renderHome(); };
 document.querySelectorAll('[data-unit]').forEach(b => b.onclick = () => { state.unit = b.dataset.unit; save(); renderHome(); });
 document.querySelectorAll('[data-voice]').forEach(b => b.onclick = () => { state.voice = b.dataset.voice === 'on'; save(); renderHome(); });
+function renderPaces() {
+  const mode = state.paceMode || 'auto';
+  document.querySelectorAll('[data-pmode]').forEach(b => b.classList.toggle('sel', b.dataset.pmode === mode));
+  $('pace5kRow').hidden = mode !== 'manual';
+  if (document.activeElement !== $('pace5k')) $('pace5k').value = state.pace5k ? fmt(state.pace5k) : '';
+  const base = paceBase();
+  const ul = $('paceList');
+  ul.innerHTML = '';
+  for (const [k, label, dot] of [['rep', 'Intervals', 'hard'], ['tempo', 'Tempo', 'tempo'], ['easy', 'Easy & long runs', 'easy']]) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="dot" style="background:${COLORS[dot]}"></span><span style="flex:1"></span><strong></strong>`;
+    li.children[1].textContent = label;
+    li.children[2].textContent = pace(k, base.secs);
+    ul.appendChild(li);
+  }
+  $('paceFrom').textContent = `Based on ${fmt(base.secs)}: ${base.from}.`;
+  $('paceFrom').classList.toggle('warn', !!base.isDefault);
+}
+document.querySelectorAll('[data-pmode]').forEach(b => b.onclick = () => {
+  state.paceMode = b.dataset.pmode; save(); renderHome();
+  if (state.paceMode === 'manual' && !state.pace5k) $('pace5k').focus();
+});
+$('pace5k').onchange = () => {
+  const t = parseTime($('pace5k').value);
+  if (t && (t < 12 * 60 || t > 60 * 60)) { alert('That 5K time looks off. Enter something between 12:00 and 60:00.'); return; }
+  state.pace5k = t || null;
+  if (t) state.paceMode = 'manual';
+  save(); renderHome();
+};
+autoColon($('pace5k'));
 $('baseline').onchange = () => { const t = parseTime($('baseline').value); state.baseline = t ? fmt(t) : ''; save(); renderHome(); };
 autoColon($('baseline'));
 autoColon($('logTime'));
@@ -914,7 +975,7 @@ renderHome();
 // ---------- Updates ----------
 // The home-screen app can keep an old copy open for days. Check for a new version
 // whenever the app comes back to the screen, and reload once it's ready (never mid-run).
-const APP_VERSION = '2026-11-17.3';
+const APP_VERSION = '2026-11-17.4';
 $('appVersion').textContent = APP_VERSION;
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
