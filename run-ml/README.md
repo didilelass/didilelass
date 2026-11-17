@@ -13,7 +13,6 @@ It goes with the [Run Coach](../running-coach) app: use Run Coach to do the sess
 
 ## 🎓 Learn the math behind it
 - [`learn_bayes_ridge_lasso.ipynb`](learn_bayes_ridge_lasso.ipynb): a hands-on refresher on Bayes, Bayesian regression, ridge and lasso, using this run data, with exercises
-- [`CHEATSHEET.md`](CHEATSHEET.md) (also as Word: [`CHEATSHEET.docx`](CHEATSHEET.docx)): one page with easy ways to remember it all, plus what interviews expect
 
 ## Try it
 
