@@ -84,7 +84,7 @@
 
   <div class="card">
     <h2>1. Your runs</h2>
-    <p class="muted">A Strava export (<code>activities.csv</code>) works as is. Or a CSV with <code>date, distance_km, duration_min, type</code>.</p>
+    <p class="muted">An export from your running app or watch works as is. Or a CSV with <code>date, distance_km, duration_min, type</code>.</p>
     <div class="row">
       <label class="btn" id="uploadBtn" for="file" role="button" tabindex="0">Upload my runs (.csv)</label>
       <input type="file" id="file" accept=".csv,text/csv">
@@ -94,7 +94,7 @@
     <p id="status" aria-live="polite"></p>
     <details>
       <summary>How do I get my runs?</summary>
-      <p><strong>Strava:</strong> on the website, Settings → My Account → Download or Delete Your Account → <em>Request your archive</em>. You'll get an email with a zip. Upload <code>activities.csv</code> from it.</p>
+      <p><strong>From your running app or watch:</strong> most of them let you download your activities as a CSV file, usually under account or privacy settings ("export data" or "download your data"). Upload that file as is; non-running activities are skipped.</p>
       <p><strong>Your own CSV:</strong></p>
       <table class="fmt"><tr><th>date</th><th>distance_km</th><th>duration_min</th><th>type</th></tr>
         <tr><td>2026-03-05</td><td>5.0</td><td>30.8</td><td>race</td></tr>
@@ -141,7 +141,7 @@
       <p><strong>4. The winner plans:</strong> each candidate plan becomes a pretend run log for the next 4 weeks, and the model predicts your 5K at the end.</p>
       <p>It's the same Python code as the command-line tool (pandas and scikit-learn), running in your browser with <a href="https://pyodide.org/">Pyodide</a>.</p>
     </details>
-    <p class="muted" style="margin-top:10px">Little data, like just a few races? The <a href="../running-coach/">Run Coach</a> phone app uses a Bayesian model made for that. · <a href="https://github.com/didilelass/didilelass/tree/main/run-ml">Code on GitHub</a></p>
+    <p class="muted" style="margin-top:10px">Little data, like just a few races? The <a href="../running-coach/">Run Coach</a> phone app uses a Bayesian model made for that. · <a href="https://colab.research.google.com/github/didilelass/didilelass/blob/main/run-ml/run_ml_colab.ipynb">Open the code in Google Colab</a></p>
   </div>
 </main>
 
@@ -303,7 +303,7 @@ function render(out) {
 $('file').onchange = async () => {
   const f = $('file').files[0];
   if (!f) return;
-  if (f.size > 30e6) return status('That file is very large. Use activities.csv from your Strava archive.', false, true);
+  if (f.size > 30e6) return status('That file is very large. Export only your activities, as a CSV.', false, true);
   analyse(await f.text(), 'your runs');
   $('file').value = '';
 };

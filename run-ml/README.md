@@ -7,12 +7,15 @@ It learns from **your own run log** how your training affects your 5K time, then
 3. **tests ~70 different 4-week plans** and shows the ones it expects to make you fastest, never growing mileage more than 10% a week
 
 **👉 Try it in your browser, no install: https://didilelass.github.io/didilelass/run-ml/**
-Upload a Strava export (or try the sample data). It runs this same Python code in your browser with [Pyodide](https://pyodide.org/), so your file never leaves your computer.
+Upload an export from your running app or watch (or try the sample data). It runs this same Python code in your browser with [Pyodide](https://pyodide.org/), so your file never leaves your computer.
 
 It goes with the [Run Coach](../running-coach) app: use Run Coach to do the sessions, and this to decide what to train next.
 
+## ▶️ Run the code in Google Colab (nothing to install)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/didilelass/didilelass/blob/main/run-ml/run_ml_colab.ipynb) **[`run_ml_colab.ipynb`](run_ml_colab.ipynb)**: the full pipeline: load runs, build features, the three models compete, predicted 5K, what matters most, best plans. Click **Runtime → Run all**, with sample data or your own file.
+
 ## 🎓 Learn the math behind it
-- [`learn_bayes_ridge_lasso.ipynb`](learn_bayes_ridge_lasso.ipynb): a hands-on refresher on Bayes, Bayesian regression, ridge and lasso, using this run data, with exercises
+- [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/didilelass/didilelass/blob/main/run-ml/learn_bayes_ridge_lasso.ipynb) [`learn_bayes_ridge_lasso.ipynb`](learn_bayes_ridge_lasso.ipynb): a hands-on refresher on Bayes, Bayesian regression, ridge and lasso, using this run data, with exercises
 
 ## Try it
 
@@ -27,11 +30,11 @@ python -m runml plan data/sample_runs.csv
 
 ## Use your own runs
 
-**Strava:** Settings → My Account → Download or Delete Your Account → *Request your archive*. Use `activities.csv` from the zip as is:
+**From your running app or watch:** most let you download your activities as a CSV (look for "export data" or "download your data" in the settings). Use it as is; non-running activities are skipped:
 
 ```bash
-python -m runml train activities.csv
-python -m runml plan activities.csv
+python -m runml train my_activities.csv
+python -m runml plan my_activities.csv
 ```
 
 **Or your own CSV** with these columns (`avg_hr` and `type` are optional):
